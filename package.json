@@ -6,6 +6,7 @@
   "engines": { "node": ">=20" },
   "scripts": {
     "test": "node --test",
-    "validate:registry": "node scripts/validate-registry.mjs"
+    "validate:registry": "node scripts/validate-registry.mjs",
+    "render:infrastructure": "node scripts/render-infrastructure.mjs"
   }
 }

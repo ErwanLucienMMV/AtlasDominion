@@ -1,0 +1,8 @@
+{
+  "hostname": "replace-with-your-host.duckdns.org",
+  "acmeEmail": "operator@example.com",
+  "acmeChallenge": "http-01",
+  "certificateAuthority": "staging",
+  "traefikImage": "traefik:v3.7.15",
+  "accessLogs": "disabled"
+}
