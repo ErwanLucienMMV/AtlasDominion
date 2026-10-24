@@ -32,8 +32,8 @@ export class ControllerClient {
       throw new ControllerError(timeout.aborted || signal?.aborted ? 'TIMEOUT' : 'DOCKER_UNAVAILABLE');
     }
   }
-  list(actor, cursor, signal) {
-    return this.request(`/v1/servers?limit=25${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, actor, undefined, signal);
+  list(actor, cursor, signal, limit = 25) {
+    return this.request(`/v1/servers?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, actor, undefined, signal);
   }
   status(id, actor) { return this.request(`/v1/servers/${id}`, actor); }
   operate(id, action, actor, interactionId) {
