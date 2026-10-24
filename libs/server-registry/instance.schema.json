@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:atlas-dominion:server-instance:1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "displayName", "gameType", "container", "adapter", "resources", "policy"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "$ref": "#/$defs/id" },
+    "displayName": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "gameType": { "$ref": "#/$defs/id" },
+    "container": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "requiredLabels", "publishedPorts"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$" },
+        "requiredLabels": {
+          "type": "object", "additionalProperties": false,
+          "required": ["io.atlasdominion.managed", "io.atlasdominion.instance"],
+          "properties": {
+            "io.atlasdominion.managed": { "const": "true" },
+            "io.atlasdominion.instance": { "$ref": "#/$defs/id" }
+          }
+        },
+        "publishedPorts": {
+          "type": "array", "maxItems": 64,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["hostPort", "containerPort", "protocol"],
+            "properties": {
+              "hostPort": { "$ref": "#/$defs/port" },
+              "containerPort": { "$ref": "#/$defs/port" },
+              "protocol": { "enum": ["tcp", "udp"] }
+            }
+          }
+        }
+      }
+    },
+    "adapter": {
+      "type": "object", "additionalProperties": false,
+      "required": ["lifecycle", "readiness", "stop", "backup"],
+      "properties": {
+        "lifecycle": { "enum": ["generic"] },
+        "readiness": { "enum": ["unverified", "docker-health"] },
+        "stop": { "enum": ["docker-stop"] },
+        "backup": { "enum": ["stopped-volume"] }
+      }
+    },
+    "resources": {
+      "type": "object", "additionalProperties": false,
+      "required": ["admissionMemoryMiB", "admissionCpuUnits", "hardMemoryMiB"],
+      "properties": {
+        "admissionMemoryMiB": { "type": "integer", "minimum": 1 },
+        "admissionCpuUnits": { "type": "number", "exclusiveMinimum": 0 },
+        "hardMemoryMiB": { "type": ["integer", "null"], "minimum": 1 }
+      }
+    },
+    "policy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["allowedDiscordGuilds", "allowedDiscordUsers", "allowedDiscordRoles", "stopRequiresAdmin", "allowAutoRestart"],
+      "properties": {
+        "allowedDiscordGuilds": { "$ref": "#/$defs/allowlist" },
+        "allowedDiscordUsers": { "$ref": "#/$defs/allowlist" },
+        "allowedDiscordRoles": { "$ref": "#/$defs/allowlist" },
+        "stopRequiresAdmin": { "const": false },
+        "allowAutoRestart": { "const": false }
+      }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$" },
+    "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+    "allowlist": {
+      "type": "array", "maxItems": 1000, "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[0-9]{17,20}$" }
+    }
+  }
+}
