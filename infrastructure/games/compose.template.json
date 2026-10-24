@@ -1,0 +1,24 @@
+{
+  "name": "atlas-game-${INSTANCE_ID:?Set stable registry instance ID}",
+  "services": {
+    "game": {
+      "image": "${GAME_IMAGE:?Set manually reviewed version-pinned game image}",
+      "pull_policy": "never",
+      "container_name": "${GAME_CONTAINER_NAME:?Set exact registry container name}",
+      "restart": "no",
+      "labels": {"io.atlasdominion.managed": "true", "io.atlasdominion.instance": "${INSTANCE_ID:?Set instance ID}"},
+      "cap_drop": ["ALL"],
+      "security_opt": ["no-new-privileges:true"],
+      "mem_limit": "${GAME_MEMORY_LIMIT:?Set measured Docker memory limit}",
+      "cpus": "${GAME_CPU_LIMIT:?Set measured Docker CPU limit}",
+      "pids_limit": "${GAME_PIDS_LIMIT:?Set reviewed process limit}",
+      "stop_grace_period": "${GAME_STOP_GRACE_PERIOD:?Set reviewed graceful stop timeout}",
+      "ports": [{"target": "${GAME_CONTAINER_PORT:?Set native container port}", "published": "${GAME_HOST_PORT:?Set approved native host port}", "host_ip": "${GAME_BIND_ADDRESS:?Set approved bind address}", "protocol": "${GAME_PORT_PROTOCOL:?Set tcp or udp}"}],
+      "volumes": [{"type": "volume", "source": "world", "target": "${GAME_DATA_TARGET:?Set image-specific data directory}"}],
+      "networks": ["game"],
+      "logging": {"driver": "none"}
+    }
+  },
+  "volumes": {"world": {"external": true, "name": "${GAME_DATA_VOLUME:?Set pre-created persistent volume}"}},
+  "networks": {"game": {"name": "atlas-game-${INSTANCE_ID:?Set instance ID}"}}
+}

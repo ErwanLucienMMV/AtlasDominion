@@ -1,0 +1,42 @@
+{
+  "name": "atlas-applications",
+  "services": {
+    "discord-api": {
+      "image": "${DISCORD_API_IMAGE:?Set reviewed version-pinned Discord API image}",
+      "pull_policy": "never",
+      "restart": "unless-stopped",
+      "read_only": true,
+      "cap_drop": ["ALL"],
+      "security_opt": ["no-new-privileges:true"],
+      "tmpfs": ["/tmp:size=16m,noexec,nosuid"],
+      "networks": {"proxy": {"aliases": ["atlas-discord-api"]}, "control": {}, "egress": {}},
+      "environment": {"PORT": "3000", "CONTROLLER_URL": "http://atlas-controller:3000", "CONTROLLER_SECRET_FILE": "/run/secrets/controller-token"},
+      "secrets": ["controller-token"],
+      "logging": {"driver": "none"}
+    },
+    "docker-controller": {
+      "image": "${CONTROLLER_IMAGE:?Set reviewed version-pinned controller image}",
+      "pull_policy": "never",
+      "restart": "unless-stopped",
+      "read_only": true,
+      "cap_drop": ["ALL"],
+      "security_opt": ["no-new-privileges:true"],
+      "tmpfs": ["/tmp:size=16m,noexec,nosuid"],
+      "networks": {"control": {"aliases": ["atlas-controller"]}, "monitoring": {}},
+      "environment": {"PORT": "3000", "CONTROLLER_SECRET_FILE": "/run/secrets/controller-token", "REGISTRY_DIRECTORY": "/registry"},
+      "secrets": ["controller-token"],
+      "volumes": [
+        {"type": "bind", "source": "/var/run/docker.sock", "target": "/var/run/docker.sock", "read_only": true, "bind": {"create_host_path": false}},
+        {"type": "bind", "source": "${REGISTRY_DIRECTORY:?Set approved absolute registry directory}", "target": "/registry", "read_only": true, "bind": {"create_host_path": false}}
+      ],
+      "logging": {"driver": "none"}
+    }
+  },
+  "secrets": {"controller-token": {"file": "${CONTROLLER_SECRET_FILE:?Set protected controller secret file}"}},
+  "networks": {
+    "proxy": {"external": true, "name": "atlas-proxy"},
+    "control": {"external": true, "name": "atlas-control"},
+    "monitoring": {"external": true, "name": "atlas-monitoring"},
+    "egress": {"name": "atlas-discord-egress"}
+  }
+}
