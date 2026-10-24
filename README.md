@@ -19,6 +19,8 @@ Phase 2 adds the authenticated NestJS/Dockerode controller, lifecycle locks, res
 
 Phase 3 adds signed Discord HTTP interactions, guild/user/role authorization, dynamic server commands, autocomplete, pagination and deferred private replies. See the [Discord configuration and security runbook](docs/PHASE_3_DISCORD.md) and [Phase 3 validation](docs/PHASE_3_VALIDATION.md).
 
+Phase 4 adds a separate Minecraft Java Edition stack with a persistent external world volume, matching deny-by-default registry example and signed lifecycle integration tests. See the [Minecraft setup and live acceptance runbook](docs/PHASE_4_MINECRAFT.md) and [validation evidence](docs/PHASE_4_VALIDATION.md). Live deployment, graceful saving, gameplay and persistence checks remain operator gates.
+
 Node.js 20 or newer; install the pinned application dependencies with `npm ci`.
 
 ```sh

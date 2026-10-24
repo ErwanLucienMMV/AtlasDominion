@@ -89,3 +89,27 @@ test('every required stack variable fails closed when omitted', () => {
     }
   }
 });
+
+test('Minecraft Compose resolves native ports, persistent world and explicit operator settings', () => {
+  const env = {
+    MINECRAFT_IMAGE: `itzg/minecraft-server@sha256:${'a'.repeat(64)}`,
+    MINECRAFT_EULA: 'TRUE', MINECRAFT_VERSION: '1.21.1', MINECRAFT_HEAP: '4G',
+    MINECRAFT_MEMORY_LIMIT: '6144m', MINECRAFT_CPU_LIMIT: '2',
+    MINECRAFT_BIND_ADDRESS: '127.0.0.1', MINECRAFT_DATA_VOLUME: 'validation-only-world'
+  };
+  const file = 'infrastructure/games/minecraft/compose.json';
+  const resolved = compose(file, env);
+  const game = resolved.services.minecraft;
+  assert.equal(Number(game.mem_limit), 6144 * 1048576);
+  assert.equal(game.ports.length, 1);
+  assert.equal(game.ports[0].target, 25565);
+  assert.equal(game.ports[0].host_ip, '127.0.0.1');
+  assert.equal(game.stop_grace_period, '1m30s');
+  assert.equal(game.environment.VERSION, '1.21.1');
+  assert.equal(resolved.volumes.world.external, true);
+  assert.equal(game.volumes[0].target, '/data');
+  for (const key of Object.keys(env)) {
+    const missing = { ...env, [key]: '' };
+    compose(file, missing, false);
+  }
+});
