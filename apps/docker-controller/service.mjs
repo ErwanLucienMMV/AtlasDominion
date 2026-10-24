@@ -21,19 +21,18 @@ export class ControllerService {
   }
   async reconcile() {
     this.ready = false;
-    const held = new Set(this.reservations);
     try {
       for (const entry of this.instances) {
         try {
           const { data } = await this.docker.inspect(entry);
-          if (activeStates.has(data.State.Status)) held.add(entry.id); else if (!this.locks.has(entry.id)) held.delete(entry.id);
+          if (activeStates.has(data.State.Status)) this.reservations.add(entry.id); else if (!this.locks.has(entry.id)) this.reservations.delete(entry.id);
         } catch (error) {
           if (error.code !== 'MISSING_CONTAINER') throw error;
-          if (!this.locks.has(entry.id)) held.delete(entry.id);
+          if (!this.locks.has(entry.id)) this.reservations.delete(entry.id);
         }
       }
-      this.reservations = held; this.ready = true;
-    } catch (error) { this.reservations = held; throw error; }
+      this.ready = true;
+    } catch (error) { this.ready = false; throw error; }
   }
   async status(id, actor) {
     const entry = this.authorize(id, actor);
@@ -103,8 +102,8 @@ export class ControllerService {
       return { status: 202, operation: structuredClone(op) };
     } catch (error) {
       this.locks.delete(id);
-      // A failed preflight must reconcile before the next admission.
-      this.ready = false;
+      // Engine/identity failures require reconciliation before further admission.
+      if (!(error instanceof Fault) || ['DOCKER_UNAVAILABLE', 'IDENTITY_MISMATCH', 'PORT_MISMATCH'].includes(error.code)) this.ready = false;
       throw error instanceof Fault ? error : new Fault('DOCKER_UNAVAILABLE');
     }
   }
