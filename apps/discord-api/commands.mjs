@@ -23,7 +23,7 @@ export function command(data, autocomplete = false) {
   return { action: sub.name, instance: option.value };
 }
 
-const clean = value => String(value).replace(/[`*_~|\\<>@\r\n]/g, ' ').slice(0, 100);
+const clean = value => String(value).replace(/[`*~|\\<>@\r\n]/g, ' ').slice(0, 100);
 export function statusText(server) {
   return `${clean(server.displayName)} (${clean(server.instanceId)}): Docker ${clean(server.docker)}; readiness ${clean(server.readiness)}; desired ${clean(server.desired)}.`;
 }

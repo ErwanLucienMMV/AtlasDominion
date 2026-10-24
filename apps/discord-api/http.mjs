@@ -35,7 +35,7 @@ export async function createDiscordApplication(service, configuration) {
     }
   }
   Controller()(Interactions);
-  Post('interactions')(Interactions.prototype, 'handle', Object.getOwnPropertyDescriptor(Interactions.prototype, 'handle'));
+  Post('discord/interactions')(Interactions.prototype, 'handle', Object.getOwnPropertyDescriptor(Interactions.prototype, 'handle'));
   Req()(Interactions.prototype, 'handle', 0); Res()(Interactions.prototype, 'handle', 1);
   class ApplicationModule {}
   Module({ controllers: [Interactions] })(ApplicationModule);

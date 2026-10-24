@@ -25,7 +25,7 @@ async function setup(t, controller = {}, options = {}) {
   const base = await app.getUrl();
   const post = async (payload, overrides = {}) => {
     const body = typeof payload === 'string' ? payload : JSON.stringify(payload), timestamp = String(Math.floor(Date.now() / 1000));
-    return fetch(`${base}/interactions`, { method: 'POST', headers: { 'content-type': 'application/json',
+    return fetch(`${base}/discord/interactions`, { method: 'POST', headers: { 'content-type': 'application/json',
       'x-signature-timestamp': timestamp, 'x-signature-ed25519': sign(null, Buffer.from(timestamp + body), keys.privateKey).toString('hex'), ...overrides }, body });
   };
   const done = async (count = 1) => {
@@ -103,4 +103,26 @@ test('commands reject arbitrary options, paths and provisioning while registrati
   for (const value of ['../container', '/exec', 'UPPER', 'x'.repeat(64)]) assert.throws(() => command(interaction('start', value).data));
   assert.throws(() => command(interaction('create').data));
   const payload = interaction(); payload.data.options[0].options.push({ name: 'command', value: 'exec', type: 3 }); assert.throws(() => command(payload.data));
+});
+test('bounded pending jobs and per-user rate limit deny work before controller access', async t => {
+  let calls = 0;
+  const { post, service } = await setup(t, { status: async () => { calls++; } }, { maxPending: 0 });
+  assert.match((await (await post(interaction())).json()).data.content, /capacity/);
+  for (let i = 0; i < 19; i++) await post(interaction());
+  assert.match((await (await post(interaction())).json()).data.content, /limit/);
+  assert.equal(service.pending.size, 0); assert.equal(calls, 0);
+});
+test('pending operations report pending at completion deadline and failed operations retain error', async t => {
+  const { post, done, service } = await setup(t, { operate: async () => ({ operationId: 'op', instanceId: 'test-instance', action: 'start', state: 'queued' }) }, { completionMs: 0 });
+  await post(interaction('start')); assert.match((await done()).content, /Still pending/);
+  service.controller.operate = async () => ({ operationId: 'op', instanceId: 'test-instance', action: 'start', state: 'failed', error: 'DOCKER_UNAVAILABLE' });
+  await post(interaction('start')); const result = await done(2); assert.match(result.content, /failed/); assert.match(result.content, /DOCKER_UNAVAILABLE/);
+});
+test('failed Discord delivery does not repeat lifecycle work or retain a pending slot', async () => {
+  let operations = 0;
+  const service = new DiscordService({ applicationId, controller: { operate: async () => { operations++; return { state: 'completed' }; } },
+    fetchImpl: async () => { throw new Error('sensitive-url'); } });
+  const payload = interaction('start'); assert.equal(service.reserve(payload), 'accepted');
+  await service.complete(payload, { action: 'start', instance: 'test-instance' }, { guildId: guild, userId: user, roleIds: [] });
+  assert.equal(service.pending.size, 0); assert.equal(operations, 1); assert.equal(service.reserve(payload), 'duplicate');
 });
