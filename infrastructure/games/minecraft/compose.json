@@ -1,0 +1,39 @@
+{
+  "name": "atlas-game-minecraft-survival",
+  "services": {
+    "minecraft": {
+      "image": "${MINECRAFT_IMAGE:?Set reviewed itzg/minecraft-server image digest}",
+      "pull_policy": "never",
+      "container_name": "game-minecraft-survival",
+      "restart": "no",
+      "labels": {
+        "io.atlasdominion.managed": "true",
+        "io.atlasdominion.instance": "minecraft-survival"
+      },
+      "environment": {
+        "EULA": "${MINECRAFT_EULA:?Explicit license acceptance required}",
+        "TYPE": "VANILLA",
+        "VERSION": "${MINECRAFT_VERSION:?Set exact reviewed Minecraft version}",
+        "MEMORY": "${MINECRAFT_HEAP:?Set heap below container memory limit}",
+        "ONLINE_MODE": "TRUE",
+        "ENABLE_RCON": "true",
+        "STOP_DURATION": "60",
+        "STOP_SERVER_ANNOUNCE_DELAY": "0"
+      },
+      "cap_drop": ["ALL"],
+      "security_opt": ["no-new-privileges:true"],
+      "user": "1000:1000",
+      "mem_limit": "${MINECRAFT_MEMORY_LIMIT:?Set reviewed hard memory limit}",
+      "cpus": "${MINECRAFT_CPU_LIMIT:?Set reviewed CPU limit}",
+      "pids_limit": 512,
+      "stop_signal": "SIGTERM",
+      "stop_grace_period": "90s",
+      "ports": [{"target": 25565, "published": "25565", "host_ip": "${MINECRAFT_BIND_ADDRESS:?Set approved native game bind address}", "protocol": "tcp"}],
+      "volumes": [{"type": "volume", "source": "world", "target": "/data"}],
+      "networks": ["game"],
+      "logging": {"driver": "local", "options": {"max-size": "10m", "max-file": "3"}}
+    }
+  },
+  "volumes": {"world": {"external": true, "name": "${MINECRAFT_DATA_VOLUME:?Set approved pre-created persistent volume}"}},
+  "networks": {"game": {"name": "atlas-game-minecraft-survival"}}
+}

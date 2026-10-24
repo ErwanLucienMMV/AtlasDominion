@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "minecraft-survival",
+  "displayName": "Minecraft Survival",
+  "gameType": "minecraft",
+  "container": {
+    "name": "game-minecraft-survival",
+    "requiredLabels": {"io.atlasdominion.managed": "true", "io.atlasdominion.instance": "minecraft-survival"},
+    "publishedPorts": [{"hostPort": 25565, "containerPort": 25565, "protocol": "tcp"}]
+  },
+  "adapter": {"lifecycle": "generic", "readiness": "unverified", "stop": "docker-stop", "backup": "stopped-volume"},
+  "resources": {"admissionMemoryMiB": 6144, "admissionCpuUnits": 2, "hardMemoryMiB": 6144},
+  "policy": {
+    "allowedDiscordGuilds": [], "allowedDiscordUsers": [], "allowedDiscordRoles": [],
+    "stopRequiresAdmin": false, "allowAutoRestart": false
+  }
+}

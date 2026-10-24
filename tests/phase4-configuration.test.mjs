@@ -1,0 +1,34 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { validateRegistry } from '../libs/server-registry/index.mjs';
+
+const read = name => JSON.parse(readFileSync(new URL(`../infrastructure/games/minecraft/${name}`, import.meta.url)));
+test('Minecraft stack matches registry identity, persistence and native port boundary', () => {
+  const stack = read('compose.json'), instance = validateRegistry([read('instance.example.json')])[0];
+  const game = stack.services.minecraft;
+  assert.equal(game.container_name, instance.container.name);
+  assert.deepEqual(game.labels, instance.container.requiredLabels);
+  assert.equal(game.ports.length, 1);
+  const port = instance.container.publishedPorts[0];
+  assert.equal(game.ports[0].target, port.containerPort);
+  assert.equal(Number(game.ports[0].published), port.hostPort);
+  assert.equal(game.ports[0].protocol, port.protocol);
+  assert.equal(game.restart, 'no');
+  assert.equal(game.pull_policy, 'never');
+  assert.deepEqual(game.networks, ['game']);
+  assert.equal(stack.volumes.world.external, true);
+  assert.deepEqual(game.volumes, [{ type: 'volume', source: 'world', target: '/data' }]);
+  assert.equal(game.environment.ONLINE_MODE, 'TRUE');
+  assert.match(game.environment.VERSION, /:\?/);
+  assert.match(game.environment.EULA, /:\?/);
+  assert.equal(game.environment.STOP_DURATION, '60');
+  assert.equal(game.stop_grace_period, '90s');
+  assert.equal(game.stop_signal, 'SIGTERM');
+  assert.deepEqual(game.cap_drop, ['ALL']);
+  assert.equal(game.user, '1000:1000');
+  assert.equal(instance.adapter.readiness, 'unverified');
+  assert.deepEqual(instance.policy.allowedDiscordGuilds, []);
+  assert.deepEqual(instance.policy.allowedDiscordUsers, []);
+  assert.deepEqual(instance.policy.allowedDiscordRoles, []);
+});
