@@ -40,5 +40,5 @@ export function errorText(error) {
     TIMEOUT: 'The controller request timed out. The operation may still be running; check status before retrying.',
     IDENTITY_MISMATCH: 'Container identity validation failed. Ask an administrator.', PORT_MISMATCH: 'Container port validation failed. Ask an administrator.'
   };
-  return messages[error?.code] ?? 'The controller is unavailable or could not complete this request. Check status before retrying.';
+  return Object.hasOwn(messages, error?.code) ? messages[error.code] : 'The controller is unavailable or could not complete this request. Check status before retrying.';
 }

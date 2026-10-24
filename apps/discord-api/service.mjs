@@ -7,13 +7,14 @@ export class DiscordService {
     this.pollMs = pollMs; this.completionMs = completionMs; this.maxPending = maxPending; this.pending = new Set(); this.seen = new Map();
   }
   async autocomplete(selection, actor) {
-    const signal = AbortSignal.timeout(1800), matches = [], seen = new Set();
+    const signal = AbortSignal.timeout(1800), matches = [], seen = new Set(), emitted = new Set();
     let cursor;
     // The entire search has a deadline, page cap, and bounded result count.
     for (let page = 0; page < 40; page++) {
       const result = await this.controller.list(actor, cursor, signal);
       for (const server of result.items) {
-        if (`${server.displayName} ${server.instanceId}`.toLowerCase().includes(selection.instance.toLowerCase())) {
+        if (!emitted.has(server.instanceId) && `${server.displayName} ${server.instanceId}`.toLowerCase().includes(selection.instance.toLowerCase())) {
+          emitted.add(server.instanceId);
           matches.push({ name: `${server.displayName} (${server.instanceId})`.slice(0, 100), value: server.instanceId });
           if (matches.length === 25) return matches;
         }

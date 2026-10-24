@@ -1,5 +1,15 @@
 # Phase 3 validation
 
+## Autocomplete and error formatting follow-up
+
+The unchanged adversarial suite reproduced four failures (81 passed): overlapping registry pages emitted duplicate choices, and inherited error category names `constructor`, `__proto__` and `toString` returned non-string values from the formatter. Autocomplete now deduplicates emitted stable instance IDs before counting its 25-choice budget, preserving cursor-cycle, page and deadline limits. Error lookup now requires an own property and otherwise returns the existing sanitized fallback.
+
+Overlap is relevant when pages change between requests or upstream pagination is inconsistent; a fixed registry does not ordinarily produce it. The formatter defect could suppress a deferred final reply, but the production controller client filters these codes to `DOCKER_UNAVAILABLE`. No public exploit, prototype pollution or authorization bypass was demonstrated.
+
+Seven new regressions cover a fully populated distinct-choice budget across overlapping pages, actual final error delivery and pending-slot release for all three categories, and controller filtering for each category. The unchanged adversarial tests and new regressions pass together: **92 passed, zero failed or skipped**. The existing untracked review reports and tests were preserved without modification.
+
+Final full `npm test`: **416 passed, zero failed, cancelled or skipped**, Node 20.15.1 on Windows. Full output: `C:/Users/erwan/AppData/Local/Temp/atlas-phase3-fix-full.log`; reproduction and targeted output use the adjacent `atlas-phase3-fix-baseline.log` and `atlas-phase3-fix-targeted.log`. `git diff --check` passed. Tests required the same Windows process permission described below. No deployment or push was performed.
+
 Phase 3 implements the separate signed Discord HTTP service, generic commands and registry-backed selection. No production deployment, remote command registration, real Discord call, real Docker operation or game provisioning was performed.
 
 ## Evidence
