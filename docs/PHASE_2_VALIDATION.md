@@ -1,5 +1,13 @@
 # Phase 2 validation
 
+## Controller defect follow-up
+
+All three reported defects were independently reproduced with the unchanged adversarial edge suite: 58 passed and three failed. The controller now retains failed audit records independently of Docker readiness, retries sanitized failure records before restoring readiness, publishes terminal success only after its audit write succeeds, and retains failed no-op outcomes for replay. Preflight inspection, reconciliation and audit share a controller deadline; timeout releases the admission queue while preserving the instance lock until pending work settles, without a late lifecycle mutation.
+
+Six additional lifecycle regressions cover durable audit recovery, failed no-op start and stop replays, and stalled inspection, reconciliation and admission audit. Final `npm test`: **306 passed, zero failed, skipped or cancelled** (Node 20.15.1 on Windows). The three original failure assertions remain unchanged and now pass. `git diff --check` passed. Full output: `C:/Users/erwan/AppData/Local/Temp/atlas-controller-fixes-4f29b027-f0b4-496f-8b11-2d5f3e40721e.log`.
+
+The existing untracked acceptance files were preserved. No commits or pushes were made for this follow-up. Real Dockerode transport timeout behavior remains unverified separately; mock controller deadlines do not establish transport cancellation. Pending audit recovery records remain in memory and do not provide restart-durable recovery.
+
 Phase 2 implements the generic private NestJS/Dockerode controller. No production deployment or real game operation was performed. See [configuration, API, security review and limitations](PHASE_2_CONTROLLER.md).
 
 ## Evidence

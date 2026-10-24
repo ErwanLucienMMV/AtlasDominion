@@ -11,6 +11,7 @@ export class ControllerService {
     this.timeoutMs = timeoutMs; this.stopTimeoutSeconds = stopTimeoutSeconds; this.maxOperations = maxOperations;
     this.locks = new Map(); this.reservations = new Set(); this.operations = new Map(); this.keys = new Map(); this.desired = new Map(); this.ready = false;
     this.admission = Promise.resolve();
+    this.failedAudits = new Map();
   }
   authorize(id, actor) {
     context(actor);
@@ -19,19 +20,27 @@ export class ControllerService {
     if (!entry || !allowed(entry.policy, actor)) throw new Fault('UNKNOWN_INSTANCE');
     return entry;
   }
-  async reconcile() {
+  async reconcile(wait = promise => promise) {
     this.ready = false;
     try {
       for (const entry of this.instances) {
         try {
-          const { data } = await this.docker.inspect(entry);
+          const { data } = await wait(this.docker.inspect(entry));
           if (activeStates.has(data.State.Status)) this.reservations.add(entry.id); else if (!this.locks.has(entry.id)) this.reservations.delete(entry.id);
         } catch (error) {
           if (error.code !== 'MISSING_CONTAINER') throw error;
           if (!this.locks.has(entry.id)) this.reservations.delete(entry.id);
         }
       }
-      this.ready = true;
+      // Docker health cannot clear an unpersisted audit record. Retry the exact
+      // sanitized records; only successful durable writes recover audit health.
+      for (const [id, event] of this.failedAudits) {
+        try {
+          await wait(this.audit.append(event));
+          if (this.failedAudits.get(id) === event) this.failedAudits.delete(id);
+        } catch (error) { if (error.code === 'TIMEOUT') throw error; }
+      }
+      this.ready = this.failedAudits.size === 0;
     } catch (error) { this.ready = false; throw error; }
   }
   async status(id, actor) {
@@ -77,38 +86,86 @@ export class ControllerService {
     if (this.operations.size >= this.maxOperations) throw new Fault('RESOURCE_EXHAUSTED');
     const op = { operationId: randomUUID(), instanceId: id, action, state: 'queued', requestedAt: new Date().toISOString(), completedAt: null, result: null, error: null };
     this.locks.set(id, op.operationId);
+    const deadline = Date.now() + this.timeoutMs;
+    const pending = new Set();
+    let expired = false;
+    const wait = async promise => {
+      if (expired) throw new Fault('TIMEOUT');
+      const tracked = Promise.resolve(promise);
+      pending.add(tracked);
+      let timer;
+      try {
+        return await Promise.race([tracked, new Promise((_, reject) => {
+          timer = setTimeout(() => { expired = true; reject(new Fault('TIMEOUT')); }, Math.max(0, deadline - Date.now()));
+        })]);
+      } finally {
+        clearTimeout(timer);
+        // Keep unresolved work visible for timeout cleanup without unhandled rejections.
+        void tracked.then(() => pending.delete(tracked), () => pending.delete(tracked));
+      }
+    };
     try {
-      const { data } = await this.docker.inspect(entry);
+      const { data } = await wait(this.docker.inspect(entry));
       const already = action === 'start' ? data.State.Status === 'running' : ['exited', 'created', 'dead'].includes(data.State.Status);
       if (!already && !['running', 'exited', 'created'].includes(data.State.Status)) throw new Fault('OPERATION_CONFLICT');
       if (action === 'start' && !already) {
         // Await reconciliation while holding the instance lock, then reserve synchronously.
-        await this.reconcile();
+        await this.reconcile(wait);
+        if (!this.ready) throw new Fault('DOCKER_UNAVAILABLE');
         const reserved = this.instances.filter(e => this.reservations.has(e.id) && e.id !== id);
         if (reserved.reduce((n, e) => n + e.resources.admissionMemoryMiB, entry.resources.admissionMemoryMiB) > this.capacity.memoryMiB ||
           reserved.reduce((n, e) => n + e.resources.admissionCpuUnits, entry.resources.admissionCpuUnits) > this.capacity.cpuUnits) throw new Fault('RESOURCE_EXHAUSTED');
         this.reservations.add(id);
       }
-      await this.record(op, 'accepted');
+      await wait(this.record(op, 'accepted'));
       this.operations.set(op.operationId, op); this.keys.set(key, { operationId: op.operationId, action, instanceId: id, at: Date.now() });
       this.desired.set(id, action === 'start' ? 'wanted_running' : 'wanted_stopped');
       if (already) {
         op.result = action === 'start' ? 'already_running' : 'already_stopped';
-        await this.finish(op, 'completed'); this.locks.delete(id);
+        await this.finish(op, 'completed', wait); this.locks.delete(id);
         return { status: 200, operation: structuredClone(op) };
       }
       // Do not retain caller identity or idempotency key in asynchronous work.
       void this.execute(entry, data.Id, op);
       return { status: 202, operation: structuredClone(op) };
     } catch (error) {
-      this.locks.delete(id);
+      if (expired) {
+        this.ready = false;
+        // Timeout is not cancellation. No preflight continuation can mutate
+        // Docker; retain ownership until its outstanding dependency settles.
+        void Promise.allSettled([...pending]).then(() => { this.locks.delete(id); });
+      } else this.locks.delete(id);
       // Engine/identity failures require reconciliation before further admission.
       if (!(error instanceof Fault) || ['DOCKER_UNAVAILABLE', 'IDENTITY_MISMATCH', 'PORT_MISMATCH'].includes(error.code)) this.ready = false;
       throw error instanceof Fault ? error : new Fault('DOCKER_UNAVAILABLE');
     }
   }
-  record(op, outcome) { return this.audit.append({ timestamp: new Date().toISOString(), instanceId: op.instanceId, operation: op.action, outcome, error: op.error }); }
-  async finish(op, state) { op.state = state; op.completedAt = new Date().toISOString(); await this.record(op, state); }
+  async record(op, outcome) {
+    const event = { timestamp: new Date().toISOString(), instanceId: op.instanceId, operation: op.action, outcome, error: op.error };
+    try {
+      await this.audit.append(event);
+      const previous = this.failedAudits.get(op.operationId);
+      if (previous?.outcome === outcome && previous.error === op.error) this.failedAudits.delete(op.operationId);
+    }
+    catch {
+      const terminalFailure = ['failed', 'timed_out'].includes(op.state);
+      this.failedAudits.set(op.operationId, terminalFailure ? { ...event, outcome: op.state, error: op.error } : event); this.ready = false;
+      throw new Fault('DOCKER_UNAVAILABLE');
+    }
+  }
+  async finish(op, state, wait = promise => promise) {
+    try {
+      await wait(this.record(op, state));
+      op.state = state; op.completedAt = new Date().toISOString();
+    } catch (error) {
+      op.state = error.code === 'TIMEOUT' ? 'timed_out' : 'failed';
+      op.result = null; op.error = error.code ?? 'DOCKER_UNAVAILABLE';
+      op.completedAt = new Date().toISOString();
+      // Never later replay an undurable successful completion as success.
+      this.failedAudits.set(op.operationId, { timestamp: op.completedAt, instanceId: op.instanceId, operation: op.action, outcome: op.state, error: op.error });
+      this.ready = false; throw error;
+    }
+  }
   async execute(entry, pinnedId, op) {
     let timer, timedOut = false;
     const work = (async () => {
