@@ -7,6 +7,7 @@
   "scripts": {
     "test": "node --test",
     "validate:registry": "node scripts/validate-registry.mjs",
-    "render:infrastructure": "node scripts/render-infrastructure.mjs"
+    "render:infrastructure": "node scripts/render-infrastructure.mjs",
+    "check:infrastructure": "node --test infrastructure/checks/compose.check.mjs"
   }
 }
