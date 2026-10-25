@@ -21,6 +21,8 @@ Phase 3 adds signed Discord HTTP interactions, guild/user/role authorization, dy
 
 Phase 4 adds a separate Minecraft Java Edition stack with a persistent external world volume, matching deny-by-default registry example and signed lifecycle integration tests. See the [Minecraft setup and live acceptance runbook](docs/PHASE_4_MINECRAFT.md) and [validation evidence](docs/PHASE_4_VALIDATION.md). Live deployment, graceful saving, gameplay and persistence checks remain operator gates.
 
+Phase 5 adds authenticated instance metrics, Docker event watching, periodic reconciliation, audit-based desired-state recovery, private Prometheus/Node Exporter/Grafana configuration, generic dashboards and lifecycle/host alert rules. See the [monitoring setup and acceptance runbook](docs/PHASE_5_MONITORING.md) and [validation evidence](docs/PHASE_5_VALIDATION.md). Deployment and real-host acceptance remain operator gates; backups belong to Phase 6.
+
 Node.js 20 or newer; install the pinned application dependencies with `npm ci`.
 
 ```sh

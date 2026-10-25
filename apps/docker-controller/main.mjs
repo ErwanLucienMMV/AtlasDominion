@@ -20,11 +20,11 @@ try {
   service.desired = await service.audit.desiredStates(service.instances);
   try { await service.reconcile(); } catch { /* Authenticated health can retry after daemon recovery. */ }
   const app = await createApplication(service, [secret], [metricsSecret]);
+  app.enableShutdownHooks();
+  await app.listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
   // Separate stream client: request timeouts on lifecycle calls must not expire the event stream.
   const observer = new LifecycleObserver(service, new Docker({ socketPath: '/var/run/docker.sock' })).start();
   for (const signal of ['SIGTERM', 'SIGINT']) process.once(signal, () => observer.stop());
-  app.enableShutdownHooks();
-  await app.listen(Number(process.env.PORT ?? 3000), '0.0.0.0');
 } catch {
   console.error('Controller startup failed: review protected configuration and dependencies.');
   process.exitCode = 1;

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, appendFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
@@ -76,7 +76,8 @@ test('event stream chunking, disconnect recovery, periodic repair and resource s
   assert.equal(service.monitoring.streamUp, false);
 });
 test('fixed operation outcome series count terminal results', () => {
-  const m = new Monitoring(); m.outcome({ instanceId: 'sample-0', action: 'start', state: 'completed' });
+  const m = new Monitoring(), op = { instanceId: 'sample-0', action: 'start', state: 'completed' };
+  m.outcome(op); m.outcome(op);
   assert.equal(m.outcomes.get('sample-0:start:completed'), 1);
 });
 test('metrics-only credentials cannot call lifecycle APIs', async () => {
@@ -88,4 +89,32 @@ test('metrics-only credentials cannot call lifecycle APIs', async () => {
     assert.equal((await fetch(`${base}/v1/health`, { headers: { authorization: `Bearer ${metricsSecret}` } })).status, 401);
     assert.equal((await fetch(`${base}/metrics`, { headers: { authorization: `Bearer ${secret}` } })).status, 401);
   } finally { await app.close(); }
+});
+test('duration metrics measure terminal lifecycle latency', () => {
+  const { service } = setup();
+  service.monitoring.outcome({ instanceId: 'sample-0', action: 'stop', state: 'completed', requestedAt: '2026-10-25T00:00:00Z', completedAt: '2026-10-25T00:00:02Z' });
+  assert.match(service.monitoring.render(service), /atlas_operation_duration_seconds_sum\{instance="sample-0",action="stop",outcome="completed"\} 2/);
+});
+test('reconstructed controller restores intent and running reservations from audit and Engine', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'atlas-phase5-restart-'));
+  const audit = new AuditLog(directory), { service, states } = setup();
+  await audit.append({ timestamp: '2026-10-25T00:00:00Z', instanceId: 'sample-0', operation: 'stop', outcome: 'accepted', error: null });
+  await audit.append({ timestamp: '2026-10-25T00:00:01Z', instanceId: 'sample-1', operation: 'start', outcome: 'accepted', error: null });
+  states[0] = 'exited'; service.desired = await audit.desiredStates(service.instances); await service.reconcile();
+  assert.equal(service.desired.get('sample-0'), 'wanted_stopped');
+  assert.equal(service.desired.get('sample-1'), 'wanted_running');
+  assert.equal(service.reservations.has('sample-0'), false); assert.equal(service.reservations.has('sample-1'), true);
+  assert.equal(service.monitoring.exits.size, 0);
+  await appendFile(join(directory, '2026-10-25.jsonl'), 'damaged record\n');
+  await assert.rejects(audit.desiredStates(service.instances), SyntaxError);
+});
+test('malformed and oversized event frames reconnect without trusting payloads', async () => {
+  const { service } = setup(); let connections = 0; const streams = [];
+  const observer = new LifecycleObserver(service, { getEvents: async () => { connections++; const stream = new PassThrough(); streams.push(stream); return stream; } }, { intervalMs: 10000, retryMs: 5 }).start();
+  const wait = async predicate => { const deadline = Date.now() + 2000; while (!predicate()) { assert.ok(Date.now() < deadline); await new Promise(r => setTimeout(r, 5)); } };
+  try {
+    await wait(() => connections === 1); streams[0].write('invalid JSON\n');
+    await wait(() => connections === 2); streams[1].write('x'.repeat(65537));
+    await wait(() => connections === 3); assert.equal(service.instances.length, 3);
+  } finally { observer.stop(); }
 });

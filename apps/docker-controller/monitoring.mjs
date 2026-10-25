@@ -1,7 +1,7 @@
 // Labels come only from the validated registry and fixed enumerations.
 const quote = value => JSON.stringify(String(value));
 export class Monitoring {
-  constructor() { this.observed = new Map(); this.outcomes = new Map(); this.exits = new Map(); this.resources = new Map(); this.streamUp = false; this.lastReconcile = 0; }
+  constructor() { this.observed = new Map(); this.outcomes = new Map(); this.durations = new Map(); this.finished = new WeakSet(); this.exits = new Map(); this.resources = new Map(); this.streamUp = false; this.lastReconcile = 0; }
   observe(id, state, desired) {
     const previous = this.observed.get(id);
     if (previous === 'running' && ['exited', 'dead', 'missing'].includes(state) && desired !== 'wanted_stopped') {
@@ -10,8 +10,13 @@ export class Monitoring {
     this.observed.set(id, state);
   }
   outcome(op) {
+    // Failed completion persistence may retry finish(); count the operation once.
+    if (this.finished.has(op)) return;
+    this.finished.add(op);
     const key = `${op.instanceId}:${op.action}:${op.state}`;
     this.outcomes.set(key, (this.outcomes.get(key) ?? 0) + 1);
+    const duration = (Date.parse(op.completedAt) - Date.parse(op.requestedAt)) / 1000;
+    if (Number.isFinite(duration) && duration >= 0) this.durations.set(key, (this.durations.get(key) ?? 0) + duration);
   }
   render(service) {
     const lines = [];
@@ -45,6 +50,8 @@ export class Monitoring {
     for (const [key, count] of this.outcomes) {
       const [instance, action, outcome] = key.split(':');
       emit('atlas_operations_total', count, { instance, action, outcome });
+      emit('atlas_operation_duration_seconds_count', count, { instance, action, outcome });
+      emit('atlas_operation_duration_seconds_sum', this.durations.get(key) ?? 0, { instance, action, outcome });
     }
     return `${lines.join('\n')}\n`;
   }
