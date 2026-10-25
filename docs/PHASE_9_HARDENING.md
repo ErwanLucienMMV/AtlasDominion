@@ -8,9 +8,13 @@ Both Nest HTTP applications limit active handlers to 32. Excess requests receive
 
 Node servers allow at most 128 simultaneous connections and 100 requests per socket, with 5-second header and keep-alive limits, a 10-second request-body deadline and 30-second socket inactivity timeout. These bound transport exposure; they do not cancel Docker work. Reverse proxy controls and container limits remain necessary against ingress floods.
 
+The [Phase 9 correction](PHASE_9_FIX_VALIDATION.md) sets Node's connection checker to 250 milliseconds before listening so incomplete requests are checked promptly; the original default 30-second polling interval did not enforce those deadlines as documented. Real-socket tests cover incomplete headers on both applications and the public request-body deadline. Successful Discord direct replies explicitly use HTTP 200, including PING, deferred and autocomplete responses.
+
 The controller accepts at most `maxPendingRequests` queued/active admission requests (default 100), independently of retained operations (`maxOperations`, default 10000). Both must be positive safe integers. Queue saturation returns `RESOURCE_EXHAUSTED` before inspecting Docker or writing audit records. Existing atomic memory/CPU reservations, registry limits and per-instance exclusion remain mandatory. Configure admission budgets only after reserving measured capacity for the OS, existing TCP 4242 workload and infrastructure.
 
 An execution inspection returning after timeout cannot begin a start or stop. In-flight mutations cannot be undone by a deadline: retain their instance lock until the underlying work settles, report timeout, and reconcile before accepting new work. Never clear a lock merely to make admission succeed.
+
+The same monotonic execution deadline now covers terminal audit persistence. Stalled persistence reports a timed-out result without late success, retains ownership and prevents readiness recovery until the outstanding write settles and a corrective terminal record persists. Configured millisecond timeouts above 2,147,483,647 are rejected to prevent Node timer overflow.
 
 ## Milestone-one validation
 

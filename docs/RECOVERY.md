@@ -54,6 +54,8 @@ Audit retains only time, instance ID, operation, outcome and sanitized error. Ap
 
 Audit files remain append-only with no automatic pruning. Approve a storage budget and review daily growth/free space. Do not delete older audit files without preserving intent-recovery evidence; no audit checkpoint/compaction is implemented. A full disk blocks durable operation acceptance. Backup evidence and optional proxy access files also require an approved retention/archive policy; Docker stdout rotation does not rotate bind-mounted access files.
 
+After clock rollback, new audit records remain in the highest existing day file with their true event timestamps, so filename/append replay preserves new acceptance order. Do not assume every record's timestamp matches its filename day when reviewing retention. If a legacy controller already wrote intent into earlier files out of order, preserve those files and investigate using trusted external evidence; automatic replay cannot recover ordering information that was never recorded. Keep one active controller writer per audit directory.
+
 Run `npm test`, `npm run check:production`, `promtool check rules infrastructure/monitoring/alerts.yml` and `promtool test rules tests/fixtures/phase9/alerts.test.yml`. Verify generic instance discovery, controller readiness, reconciliation/event/sampling health, host CPU/RAM/disk pressure and intended-stop suppression. Test an alert receiver end to end: rule evaluation alone does not deliver a notification. Backup failure/liveness currently uses sanitized worker logs and needs an approved receiver. Discord reachability and TLS expiry need operator probes; no blackbox exporter or notification integration is claimed.
 
 ## Completion record

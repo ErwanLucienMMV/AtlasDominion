@@ -26,4 +26,14 @@ The first corrected focused run caught an error-category regression: healthy tim
 
 Only application/library code, one exact HTTP-status test expectation, the supplied Phase 9 evidence, added regressions and documentation belong to these corrective commits. Unrelated untracked Phase 0–6 work remains unchanged and unstaged. Git history is preserved and nothing is pushed. No production Docker mutation, game operation, daemon restart, firewall change, host reboot or live-volume restoration is performed.
 
-Local test execution requires the same Windows sandbox exceptions as prior phases. Prometheus tools, hosted CI and live deployment checks remain separate from loopback/mock validation. Complete-suite and configuration evidence follows after final verification.
+Local test execution requires the same Windows sandbox exceptions as prior phases. Prometheus tools, hosted CI and live deployment checks remain separate from loopback/mock validation.
+
+## Final verification
+
+- `npm test`: **1,150 passed**, zero failures/skips/cancellations/TODO, **50.64 seconds**. This includes all 1,032 tests from the earlier Phase 9 delivery, all 108 supplied adversarial tests and ten added regression checks. Log: `%TEMP%/atlas-phase9-fix-full.txt`.
+- `npm run check:production`: **15 passed**, zero failures/skips/cancellations, **28.84 seconds**. Compose configuration rendering only, with no Docker resource changes. Log: `%TEMP%/atlas-phase9-fix-compose.txt`.
+- Final whitespace review passed. Existing unrelated untracked reports/tests remain outside these commits. No dependencies, CI conditions, protected checks or coverage requirements changed.
+
+Corrective implementation and regression evidence are committed in `65c6655`; the subsequent documentation milestone records final validation and updates the controller, monitoring, hardening and recovery guidance. Actual commit times remain at least two minutes apart. No timestamp rewriting, history rewriting or push is performed.
+
+The full suite passed on the available Windows Node 20.15.1 runtime. Other supported runtimes execute in the existing CI matrix after an authorized push; no hosted run is claimed. `promtool` remains unavailable locally and its existing semantic fixtures were not rerun. No infrastructure templates, alert rules or CI workflows changed in this correction. Live Linux isolation, Discord registration, reverse-proxy slow-client handling, daemon/host recovery and real game restoration remain the operator gates already documented.

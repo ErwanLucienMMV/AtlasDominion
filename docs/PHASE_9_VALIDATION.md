@@ -38,3 +38,7 @@ Windows sandbox Node initially failed with `EPERM` resolving the workspace paren
 Three milestones: request/admission safety, infrastructure/CI, then recovery tests/tooling and documentation. Commits use actual creation times at least 120 seconds apart, guarded before subsequent commits; no timestamp fabrication. Existing untracked Phase 0–6 reports/tests are preserved unchanged and excluded from commits. The configured `origin/main` reference was already reported as gone; no remote integration is attempted. Nothing is pushed.
 
 Phase 9 repository work is delivered. Production acceptance remains conditional on the live gates above and unresolved gates from earlier game phases. Next work is an operator-reviewed Linux deployment/acceptance exercise; off-host backup is separately scoped.
+
+## Corrective review
+
+The subsequently supplied [adversarial report](PHASE_9_ADVERSARIAL_VALIDATION.md) reproduced 13 failures across seven issue classes. See [corrective validation](PHASE_9_FIX_VALIDATION.md) for the causes, fixes and subsequent results. The original validation above remains historical evidence; it does not supersede those findings or the remaining live acceptance gates.
