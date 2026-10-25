@@ -15,6 +15,9 @@ export function hardenHttpServer(server) {
   server.maxRequestsPerSocket = 100;
   server.headersTimeout = 5000;
   server.requestTimeout = 10000;
+  // Node installs this checker on listen(); its default 30s interval would let
+  // incomplete requests survive far beyond the declared header/body deadlines.
+  server.connectionsCheckingInterval = 250;
   server.keepAliveTimeout = 5000;
   // Inactivity closes sockets, but does not claim to cancel application work.
   server.setTimeout(30000, socket => socket.destroy());

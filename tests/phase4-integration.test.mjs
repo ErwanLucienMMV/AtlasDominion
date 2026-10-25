@@ -51,7 +51,7 @@ test('signed Discord -> authenticated controller -> pinned Docker lifecycle, rep
     const response = await fetch(`${await discord.getUrl()}/discord/interactions`, { method: 'POST',
       headers: { 'content-type': 'application/json', 'x-signature-timestamp': timestamp,
         'x-signature-ed25519': sign(null, Buffer.from(timestamp + body), keys.privateKey).toString('hex') }, body });
-    assert.equal(response.status, 201);
+    assert.equal(response.status, 200);
     return response.json();
   }
   async function complete(action, options) {

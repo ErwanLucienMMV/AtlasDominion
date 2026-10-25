@@ -52,6 +52,9 @@ export async function verifyArchive(archive, instanceId) {
 }
 // Always creates a new destination; never overwrites an active world.
 export async function restoreArchive(archive, destination, instanceId) {
+  // The worker's archive/restore-test scratch is supported, but restoring into
+  // the payload would add unmanifested files and invalidate the source backup.
+  if (pathsOverlap(join(archive, 'data'), destination)) throw new Error('Restoration overlaps archive data');
   const manifest = await verifyArchive(archive, instanceId);
   await mkdir(destination);
   for (const entry of manifest.entries) {

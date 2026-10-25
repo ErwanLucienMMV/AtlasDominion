@@ -8,7 +8,8 @@ function unsafeMount(mount) {
   if (paths.some(value => posix.basename(value) === 'docker.sock')) return true;
   if (mount.Type !== 'bind') return false;
   const source = typeof mount.Source === 'string' ? posix.normalize(mount.Source) : '/';
-  return hostSystemPaths.some(path => source === path || (path !== '/' && source.startsWith(`${path}/`)));
+  return hostSystemPaths.some(path => source === path || (path !== '/' &&
+    (source.startsWith(`${path}/`) || path.startsWith(`${source}/`))));
 }
 
 function unsafeIsolation(data) {

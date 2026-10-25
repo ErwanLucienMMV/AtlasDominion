@@ -12,7 +12,7 @@ function verifyStopped(state, allowCreated = false) {
 export class ControllerService {
   constructor({ instances, docker, policy, capacity, audit, timeoutMs, stopTimeoutSeconds, maxOperations = 10000, maxPendingRequests = 100, backupLockDirectory }) {
     if (!capacity || !Number.isFinite(capacity.memoryMiB) || capacity.memoryMiB <= 0 || !Number.isFinite(capacity.cpuUnits) || capacity.cpuUnits <= 0 ||
-      !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || !Number.isSafeInteger(stopTimeoutSeconds) || stopTimeoutSeconds < 1 || timeoutMs <= stopTimeoutSeconds * 1000) throw new Error('Explicit capacity and timeouts required');
+      !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 2147483647 || !Number.isSafeInteger(stopTimeoutSeconds) || stopTimeoutSeconds < 1 || timeoutMs <= stopTimeoutSeconds * 1000) throw new Error('Explicit capacity and timeouts required');
     if (![maxOperations, maxPendingRequests].every(value => Number.isSafeInteger(value) && value > 0)) throw new Error('Positive operation and admission limits required');
     this.maxPendingRequests = maxPendingRequests; this.pendingRequests = 0;
     this.instances = validateRegistry(instances); this.docker = docker; this.policy = policy; this.capacity = capacity; this.audit = audit;
@@ -52,6 +52,9 @@ export class ControllerService {
       // Docker health cannot clear an unpersisted audit record. Retry the exact
       // sanitized records; only successful durable writes recover audit health.
       for (const [id, event] of this.failedAudits) {
+        // A timed-out write may still append. Retry its terminal correction only
+        // after that operation releases ownership, so late success cannot win.
+        if (this.locks.get(event.instanceId) === id) continue;
         try {
           await wait(this.audit.append(event));
           if (this.failedAudits.get(id) === event) this.failedAudits.delete(id);
@@ -111,7 +114,7 @@ export class ControllerService {
     }
     const op = { operationId: randomUUID(), instanceId: id, action, state: 'queued', requestedAt: new Date().toISOString(), completedAt: null, result: null, error: null };
     this.locks.set(id, op.operationId);
-    const deadline = Date.now() + this.timeoutMs;
+    const deadline = performance.now() + this.timeoutMs;
     const pending = new Set();
     let expired = false;
     const wait = async promise => {
@@ -121,7 +124,7 @@ export class ControllerService {
       let timer;
       try {
         return await Promise.race([tracked, new Promise((_, reject) => {
-          timer = setTimeout(() => { expired = true; reject(new Fault('TIMEOUT')); }, Math.max(0, deadline - Date.now()));
+          timer = setTimeout(() => { expired = true; reject(new Fault('TIMEOUT')); }, Math.max(0, deadline - performance.now()));
         })]);
       } finally {
         clearTimeout(timer);
@@ -195,12 +198,28 @@ export class ControllerService {
     }
   }
   async execute(entry, pinnedId, op) {
-    let timer, timedOut = false;
+    let timedOut = false;
+    const deadline = performance.now() + this.timeoutMs, pending = new Set();
+    const wait = async promise => {
+      const tracked = Promise.resolve(promise);
+      pending.add(tracked);
+      void tracked.then(() => pending.delete(tracked), () => pending.delete(tracked));
+      let timer;
+      const remaining = deadline - performance.now();
+      if (timedOut || remaining <= 0) { timedOut = true; throw new Fault('TIMEOUT'); }
+      try {
+        const value = await Promise.race([tracked, new Promise((_, reject) => {
+          timer = setTimeout(() => { timedOut = true; reject(new Fault('TIMEOUT')); }, remaining);
+        })]);
+        if (performance.now() >= deadline) { timedOut = true; throw new Fault('TIMEOUT'); }
+        return value;
+      } finally { clearTimeout(timer); }
+    };
     const work = (async () => {
       const { container } = await this.docker.inspect(entry, pinnedId);
       // A transport deadline cannot cancel an inspection. Never begin a new
       // mutation when that inspection returns after the operation timed out.
-      if (timedOut) throw new Fault('TIMEOUT');
+      if (timedOut || performance.now() >= deadline) throw new Fault('TIMEOUT');
       op.state = op.action === 'start' ? 'starting' : 'stopping';
       try { if (op.action === 'start') await container.start(); else await container.stop({ t: this.stopTimeoutSeconds }); }
       catch (error) { if (error.statusCode !== 304) throw new Fault('DOCKER_UNAVAILABLE'); }
@@ -211,15 +230,28 @@ export class ControllerService {
       if (op.action === 'stop') this.reservations.delete(entry.id); else this.reservations.add(entry.id);
     })();
     try {
-      await Promise.race([work, new Promise((_, reject) => { timer = setTimeout(() => { timedOut = true; reject(new Fault('TIMEOUT')); }, this.timeoutMs); })]);
-      op.result = 'changed'; await this.finish(op, 'completed');
+      await wait(work);
+      op.result = 'changed'; await this.finish(op, 'completed', wait);
     } catch (error) {
       op.error = error instanceof Fault ? error.code : 'DOCKER_UNAVAILABLE'; this.ready = false;
-      try { await this.finish(op, timedOut ? 'timed_out' : 'failed'); } catch { this.ready = false; }
+      if (!['failed', 'timed_out'].includes(op.state)) {
+        if (timedOut || op.error === 'TIMEOUT') {
+          op.state = 'timed_out'; op.result = null; op.completedAt = new Date().toISOString();
+          this.monitoring.outcome(op);
+          this.failedAudits.set(op.operationId, { timestamp: op.completedAt, instanceId: op.instanceId, operation: op.action, outcome: op.state, error: op.error });
+          // Engine timeout has no outstanding success write. Persist failure
+          // immediately, while retaining the lock for this write and the Engine.
+          const persistence = this.record(op, 'timed_out');
+          pending.add(persistence);
+          void persistence.then(() => pending.delete(persistence), () => pending.delete(persistence));
+        } else {
+          try { await this.finish(op, 'failed', wait); } catch { this.ready = false; }
+        }
+      }
     } finally {
-      clearTimeout(timer);
-      // A timeout is not cancellation. Keep lock and reservation until Docker settles.
-      await work.catch(() => {});
+      // Neither Engine nor filesystem work is cancelled by a deadline. Keep
+      // ownership until both settle, then persist any terminal correction.
+      await Promise.allSettled([...pending]);
       await this.unlock(entry.id);
       try { await this.reconcile(); } catch { this.ready = false; }
     }

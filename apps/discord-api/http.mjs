@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { Controller, Module, Post, Req, Res } from '@nestjs/common';
+import { Controller, Module, Post, Req, Res, HttpCode } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import express from 'express';
 import { boundedHandler, hardenHttpServer } from '../../libs/http-safety.mjs';
@@ -38,6 +38,7 @@ export async function createDiscordApplication(service, configuration) {
   Interactions.prototype.handle = boundedHandler(Interactions.prototype.handle);
   Controller()(Interactions);
   Post('discord/interactions')(Interactions.prototype, 'handle', Object.getOwnPropertyDescriptor(Interactions.prototype, 'handle'));
+  HttpCode(200)(Interactions.prototype, 'handle', Object.getOwnPropertyDescriptor(Interactions.prototype, 'handle'));
   Req()(Interactions.prototype, 'handle', 0); Res()(Interactions.prototype, 'handle', 1);
   class ApplicationModule {}
   Module({ controllers: [Interactions] })(ApplicationModule);

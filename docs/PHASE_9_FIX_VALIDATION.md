@@ -1,0 +1,29 @@
+# Phase 9 corrective validation — 2026-10-25
+
+The supplied [adversarial report](PHASE_9_ADVERSARIAL_VALIDATION.md) and three test suites are preserved unchanged for traceability. Reproduction confirmed **108 tests: 95 passed, 13 failed**. The original report describes the pre-fix state; corrections and subsequent evidence are recorded here.
+
+## Confirmed causes and corrections
+
+1. **Host bind exposure:** sensitive host path checks only matched the protected path and descendants. They now also reject parents, including normalized `/var` and `/var/lib`. Root remains explicitly forbidden without treating every ordinary game-data bind as overlapping root. Existing `/srv/game-data` and safe sibling paths remain allowed. This is an approval check, not evidence of a live exploit or a new Docker provisioning capability.
+2. **Archive overlap:** restoration now rejects any destination overlapping the archive's `data` tree before creating output. Normalized paths, payload root and ancestors are covered. The worker's sibling `restore-test` directory remains supported. Existing-output preservation and archive verification remain intact; trusted ancestor-directory requirements still apply.
+3. **Completion persistence:** asynchronous execution now shares one monotonic deadline across Engine work and terminal audit persistence. Stalled success/failure persistence produces a timed-out result with null success data. Ownership stays held until outstanding Engine and filesystem work settle. A timed-out completion's corrective record is retried only after the late write settles, preventing premature readiness recovery or a later durable success winning the final outcome. Engine timeouts still attempt immediate timeout logging while keeping ownership; ordinary capacity/conflict behavior is preserved. Metrics count each operation once.
+4. **Clock rollback:** writers append to the lexically highest existing UTC-day filename whenever the event day moves backwards. Actual event timestamps and the existing five-field schema remain unchanged. Filename/append replay now retains newly accepted intent across midnight rollback and writer recreation. No journal/index is added and no history is rewritten. The log is owned by one active controller; concurrent independent controller writers are not supported. Legacy history already written out of acceptance order cannot be reconstructed reliably from wall-clock records alone: preserve it and investigate rather than silently infer or rewrite intent.
+5. **Slow ingress:** both servers set `connectionsCheckingInterval = 250` before listen. Installed Node 20.15.1 starts its timeout checker from that property on listen; its former 30-second polling interval could exceed the declared 5-second header/10-second request deadlines. Real sockets now demonstrate incomplete-header closure and the supplied incomplete-body test passes. Small scheduling delays remain possible; this is not a hard real-time guarantee or a reverse-proxy acceptance result.
+6. **Discord status:** successful direct responses explicitly use HTTP 200. Discord's [official interaction setup documentation](https://github.com/discord/discord-api-docs/blob/main/developers/interactions/overview.mdx) requires 200 for PING; its [response documentation](https://github.com/discord/discord-api-docs/blob/main/developers/interactions/receiving-and-responding.mdx) also specifies 200 for direct replies. New tests cover PING, deferred command, authorization reply and autocomplete. The older Minecraft integration assertion is corrected from Nest's default 201 to exactly 200; all payload, authorization and lifecycle assertions remain. No assertion is removed or loosened. Actual Discord endpoint registration remains a live gate.
+7. **Timer overflow:** controller configuration rejects millisecond timeouts above 2,147,483,647. The largest valid timer remains accepted. Preflight and execution elapsed-time budgets use the monotonic performance clock; audit timestamps remain UTC wall-clock values.
+
+## Focused validation
+
+- Reproduction: **95 passed, 13 failed**, no skips/cancellations. Log: `%TEMP%/atlas-phase9-fix-baseline.txt`.
+- Supplied adversarial suites plus existing Phase 2 edge cases after correction: **169 passed**, no failures/skips/cancellations. Includes all **108** supplied tests unchanged. Log: `%TEMP%/atlas-phase9-fix-focused.txt`.
+- Existing controller/audit/backup/Discord regressions: **85 passed**, no failures/skips/cancellations. Log: `%TEMP%/atlas-phase9-fix-regressions.txt`.
+- Ten new boundary/compatibility checks plus the Minecraft lifecycle integration: **11 passed**, no failures/skips/cancellations. Log: `%TEMP%/atlas-phase9-fix-additional.txt`.
+- `git diff --check`: passed; existing LF-to-CRLF normalization notices remain.
+
+The first corrected focused run caught an error-category regression: healthy timeout audit recovery had been unnecessarily deferred behind unresolved Engine work. Immediate timeout logging was restored while retaining locks; the final 169-test run includes the original exclusion and resource-capacity checks. No failing test was disabled, removed or weakened.
+
+## Delivery boundaries
+
+Only application/library code, one exact HTTP-status test expectation, the supplied Phase 9 evidence, added regressions and documentation belong to these corrective commits. Unrelated untracked Phase 0–6 work remains unchanged and unstaged. Git history is preserved and nothing is pushed. No production Docker mutation, game operation, daemon restart, firewall change, host reboot or live-volume restoration is performed.
+
+Local test execution requires the same Windows sandbox exceptions as prior phases. Prometheus tools, hosted CI and live deployment checks remain separate from loopback/mock validation. Complete-suite and configuration evidence follows after final verification.

@@ -17,7 +17,9 @@ function validateRecord(event) {
   return event;
 }
 
-// Append-only daily files. Retention deletion is an operator responsibility.
+// Append-only daily files. A clock rollback appends to the highest existing day,
+// preserving durable acceptance order without changing historical record fields.
+// Retention deletion is an operator responsibility. One controller owns the log.
 export class AuditLog {
   constructor(directory) { this.directory = directory; this.tail = Promise.resolve(); }
   async desiredStates(instances) {
@@ -42,7 +44,9 @@ export class AuditLog {
     const safe = { timestamp: event.timestamp, instanceId: event.instanceId, operation: event.operation, outcome: event.outcome, error: event.error };
     const write = this.tail.then(async () => {
       await mkdir(this.directory, { recursive: true, mode: 0o700 });
-      await appendFile(join(this.directory, `${safe.timestamp.slice(0, 10)}.jsonl`), `${JSON.stringify(safe)}\n`, { mode: 0o600 });
+      const day = `${safe.timestamp.slice(0, 10)}.jsonl`;
+      const latest = (await readdir(this.directory)).filter(file => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(file)).sort().at(-1);
+      await appendFile(join(this.directory, latest > day ? latest : day), `${JSON.stringify(safe)}\n`, { mode: 0o600 });
     });
     this.tail = write.catch(() => {});
     return write;
