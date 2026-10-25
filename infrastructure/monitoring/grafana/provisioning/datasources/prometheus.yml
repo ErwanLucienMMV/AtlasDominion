@@ -1,0 +1,9 @@
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: atlas-prometheus
+    type: prometheus
+    access: proxy
+    url: http://atlas-prometheus:9090
+    isDefault: true
+    editable: false

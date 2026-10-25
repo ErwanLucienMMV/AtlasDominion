@@ -23,13 +23,14 @@ function actorHeader(req) {
   try { return context(JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'))); }
   catch { throw new Fault('INVALID_REQUEST'); }
 }
-export async function createApplication(service, secrets) {
+export async function createApplication(service, secrets, metricsSecrets = secrets) {
   if (!secrets.length || secrets.some(s => typeof s !== 'string' || Buffer.byteLength(s) < 32)) throw new Error('Strong service secrets required');
+  if (!metricsSecrets.length || metricsSecrets.some(s => typeof s !== 'string' || Buffer.byteLength(s) < 32)) throw new Error('Strong metrics secrets required');
   class Api {
     async handle(req, res) {
       try {
-        authenticate(req.headers.authorization, secrets);
         const path = req.path;
+        authenticate(req.headers.authorization, path === '/metrics' ? metricsSecrets : secrets);
         if (path === '/metrics' && req.method === 'GET') {
           return res.type('text/plain; version=0.0.4').send(service.monitoring.render(service));
         }
@@ -75,7 +76,7 @@ export async function createApplication(service, secrets) {
   Module({ controllers: [Api] })(ApplicationModule);
   const app = await NestFactory.create(ApplicationModule, { logger: false, bodyParser: false });
   app.use((req, res, next) => {
-    try { authenticate(req.headers.authorization, secrets); next(); }
+    try { authenticate(req.headers.authorization, req.path === '/metrics' ? metricsSecrets : secrets); next(); }
     catch { res.status(401).json({ code: 'UNAUTHENTICATED', message: 'UNAUTHENTICATED' }); }
   });
   app.use(express.json({ limit: '16kb', strict: true }));

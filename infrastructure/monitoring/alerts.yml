@@ -1,0 +1,57 @@
+groups:
+  - name: atlas-lifecycle
+    rules:
+      - alert: ControllerUnavailable
+        expr: up{job="controller"} == 0 or atlas_controller_ready == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations: {summary: 'Controller unavailable or audit/Engine reconciliation unhealthy'}
+      - alert: DockerEventsDisconnected
+        expr: atlas_docker_events_connected == 0
+        for: 2m
+        labels: {severity: warning}
+        annotations: {summary: 'Docker event stream disconnected; periodic reconciliation remains active'}
+      - alert: ReconciliationStale
+        expr: time() - atlas_reconcile_timestamp_seconds > 90
+        for: 1m
+        labels: {severity: warning}
+        annotations: {summary: 'Controller has not completed reconciliation recently'}
+      - alert: UnexpectedGameExit
+        expr: (atlas_instance_state{state=~"exited|dead|missing"} == 1) and on(instance, game_type) (atlas_instance_wanted_running == 1)
+        for: 30s
+        labels: {severity: warning}
+        annotations: {summary: 'Instance intended to run is stopped or missing'}
+      - alert: ObservedUnexpectedExit
+        expr: increase(atlas_instance_unexpected_exits_total[5m]) > 0
+        labels: {severity: warning}
+        annotations: {summary: 'Unexpected running-to-stopped transition observed'}
+      - alert: LifecycleOperationStalled
+        expr: atlas_operation_age_seconds > 180
+        for: 1m
+        labels: {severity: warning}
+        annotations: {summary: 'Lifecycle operation exceeds normal duration; inspect without force-killing'}
+      - alert: AdmissionBudgetPressure
+        expr: atlas_reserved / atlas_capacity > 0.9
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: 'Controller admission budget pressure; distinct from measured host usage'}
+      - alert: HostMemoryPressure
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.1
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: 'Measured host memory pressure'}
+      - alert: HostCpuPressure
+        expr: 1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) > 0.9
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: 'Measured host CPU pressure'}
+      - alert: HostDiskLow
+        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"} / node_filesystem_size_bytes < 0.1
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: 'Host filesystem free space below ten percent'}
+      - alert: HostExporterUnavailable
+        expr: up{job="host"} == 0
+        for: 1m
+        labels: {severity: warning}
+        annotations: {summary: 'Host measurements unavailable'}

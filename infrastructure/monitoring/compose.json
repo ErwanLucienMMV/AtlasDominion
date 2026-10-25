@@ -1,0 +1,64 @@
+{
+  "name": "atlas-monitoring",
+  "services": {
+    "prometheus": {
+      "image": "${PROMETHEUS_IMAGE:?Set reviewed version or digest}",
+      "pull_policy": "never", "restart": "unless-stopped", "read_only": true,
+      "user": "65534:65534", "cap_drop": ["ALL"], "security_opt": ["no-new-privileges:true"],
+      "command": ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus", "--storage.tsdb.retention.time=${METRICS_RETENTION:?Set approved retention}", "--storage.tsdb.retention.size=${METRICS_RETENTION_SIZE:?Set approved storage bound}"],
+      "networks": {"monitoring": {"aliases": ["atlas-prometheus"]}},
+      "secrets": ["metrics-token"],
+      "volumes": [
+        {"type": "bind", "source": "./prometheus.yml", "target": "/etc/prometheus/prometheus.yml", "read_only": true, "bind": {"create_host_path": false}},
+        {"type": "bind", "source": "./alerts.yml", "target": "/etc/prometheus/alerts.yml", "read_only": true, "bind": {"create_host_path": false}},
+        {"type": "volume", "source": "metrics", "target": "/prometheus"}
+      ],
+      "logging": {"driver": "local", "options": {"max-size": "1m", "max-file": "2"}}
+    },
+    "grafana": {
+      "image": "${GRAFANA_IMAGE:?Set reviewed version or digest}",
+      "pull_policy": "never", "restart": "unless-stopped", "read_only": true,
+      "user": "472:472", "cap_drop": ["ALL"], "security_opt": ["no-new-privileges:true"],
+      "networks": {"monitoring": {}, "proxy": {"aliases": ["atlas-grafana"]}},
+      "environment": {
+        "GF_AUTH_ANONYMOUS_ENABLED": "false", "GF_USERS_ALLOW_SIGN_UP": "false",
+        "GF_SECURITY_ADMIN_USER": "${GRAFANA_ADMIN_USER:?Set non-default admin name}",
+        "GF_SECURITY_ADMIN_PASSWORD__FILE": "/run/secrets/grafana-password",
+        "GF_SECURITY_COOKIE_SECURE": "true", "GF_SECURITY_COOKIE_SAMESITE": "strict",
+        "GF_SERVER_ROOT_URL": "${GRAFANA_ROOT_URL:?Set approved HTTPS URL}",
+        "GF_ANALYTICS_REPORTING_ENABLED": "false", "GF_ANALYTICS_CHECK_FOR_UPDATES": "false",
+        "GF_LOG_MODE": "console", "GF_LOG_LEVEL": "error", "GF_SERVER_ROUTER_LOGGING": "false"
+      },
+      "secrets": ["grafana-password"],
+      "tmpfs": ["/tmp:size=16m,noexec,nosuid"],
+      "volumes": [
+        {"type": "bind", "source": "./grafana/provisioning", "target": "/etc/grafana/provisioning", "read_only": true, "bind": {"create_host_path": false}},
+        {"type": "bind", "source": "./grafana/dashboards", "target": "/etc/grafana/dashboards", "read_only": true, "bind": {"create_host_path": false}},
+        {"type": "volume", "source": "grafana", "target": "/var/lib/grafana"}
+      ],
+      "logging": {"driver": "none"}
+    },
+    "node-exporter": {
+      "image": "${NODE_EXPORTER_IMAGE:?Set reviewed version or digest}",
+      "pull_policy": "never", "restart": "unless-stopped", "read_only": true,
+      "user": "65534:65534", "cap_drop": ["ALL"], "security_opt": ["no-new-privileges:true"],
+      "pid": "host",
+      "command": ["--path.rootfs=/host", "--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+)($|/)", "--no-collector.arp", "--no-collector.netdev", "--no-collector.netstat", "--no-collector.sockstat"],
+      "networks": {"monitoring": {"aliases": ["atlas-node-exporter"]}},
+      "volumes": [{"type": "bind", "source": "/", "target": "/host", "read_only": true, "bind": {"propagation": "rslave", "create_host_path": false}}],
+      "logging": {"driver": "none"}
+    }
+  },
+  "volumes": {
+    "metrics": {"external": true, "name": "${PROMETHEUS_DATA_VOLUME:?Set approved existing volume}"},
+    "grafana": {"external": true, "name": "${GRAFANA_DATA_VOLUME:?Set approved existing volume}"}
+  },
+  "secrets": {
+    "metrics-token": {"file": "${METRICS_SECRET_FILE:?Set protected separate metrics token file}"},
+    "grafana-password": {"file": "${GRAFANA_PASSWORD_FILE:?Set protected unique admin password file}"}
+  },
+  "networks": {
+    "monitoring": {"external": true, "name": "atlas-monitoring"},
+    "proxy": {"external": true, "name": "atlas-proxy"}
+  }
+}

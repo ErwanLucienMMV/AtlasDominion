@@ -1,0 +1,13 @@
+{
+  "http": {
+    "routers": {
+      "grafana": {
+        "rule": "Host(`replace-with-approved-grafana-host.invalid`)",
+        "entryPoints": ["websecure"],
+        "service": "atlas-grafana",
+        "tls": {"certResolver": "letsencrypt", "options": "default"}
+      }
+    },
+    "services": {"atlas-grafana": {"loadBalancer": {"servers": [{"url": "http://atlas-grafana:3000"}]}}}
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "services": {
+    "docker-controller": {
+      "environment": {"CONTROLLER_CONFIG_FILE": "/etc/atlas/controller.json", "METRICS_SECRET_FILE": "/run/secrets/metrics-token"},
+      "secrets": ["metrics-token"],
+      "volumes": [
+        {"type": "bind", "source": "${CONTROLLER_CONFIG_FILE:?Set protected controller configuration}", "target": "/etc/atlas/controller.json", "read_only": true, "bind": {"create_host_path": false}},
+        {"type": "volume", "source": "controller-audit", "target": "/audit"}
+      ]
+    }
+  },
+  "volumes": {"controller-audit": {"external": true, "name": "${CONTROLLER_AUDIT_VOLUME:?Set approved existing audit volume}"}},
+  "secrets": {"metrics-token": {"file": "${METRICS_SECRET_FILE:?Set protected separate metrics token file}"}}
+}

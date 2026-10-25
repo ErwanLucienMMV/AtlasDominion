@@ -79,3 +79,13 @@ test('fixed operation outcome series count terminal results', () => {
   const m = new Monitoring(); m.outcome({ instanceId: 'sample-0', action: 'start', state: 'completed' });
   assert.equal(m.outcomes.get('sample-0:start:completed'), 1);
 });
+test('metrics-only credentials cannot call lifecycle APIs', async () => {
+  const { service } = setup(); const secret = 'c'.repeat(32), metricsSecret = 'm'.repeat(32);
+  const app = await createApplication(service, [secret], [metricsSecret]); await app.listen(0, '127.0.0.1');
+  try {
+    const base = await app.getUrl();
+    assert.equal((await fetch(`${base}/metrics`, { headers: { authorization: `Bearer ${metricsSecret}` } })).status, 200);
+    assert.equal((await fetch(`${base}/v1/health`, { headers: { authorization: `Bearer ${metricsSecret}` } })).status, 401);
+    assert.equal((await fetch(`${base}/metrics`, { headers: { authorization: `Bearer ${secret}` } })).status, 401);
+  } finally { await app.close(); }
+});
