@@ -73,7 +73,9 @@ test('overlapping observer polls coalesce; 50-instance sampling and metric serie
   assert.equal(first.filter(s => s.startsWith('atlas_instance_info{')).length, 50);
   assert.equal(first.filter(s => s.startsWith('atlas_instance_state{')).length, 450);
   assert.equal(first.filter(s => s.startsWith('atlas_container_memory_bytes{')).length, 50);
-  assert.equal(first.length, 9 + 15 * 50);
+  assert.ok(first.includes('atlas_resource_sampling_ready 1'));
+  assert.ok(first.some(s => /^atlas_resource_sampling_timestamp_seconds [1-9]/.test(s)));
+  assert.equal(first.length, 11 + 15 * 50);
   const keys = lines => lines.map(s => s.slice(0, s.lastIndexOf(' '))).sort();
   await observer.refresh();
   assert.deepEqual(keys(h.service.monitoring.render(h.service).trim().split('\n')), keys(first));

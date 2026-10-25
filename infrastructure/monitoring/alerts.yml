@@ -16,6 +16,11 @@ groups:
         for: 1m
         labels: {severity: warning}
         annotations: {summary: 'Controller has not completed reconciliation recently'}
+      - alert: ResourceSamplingDegraded
+        expr: atlas_resource_sampling_ready == 0 or time() - atlas_resource_sampling_timestamp_seconds > 90
+        for: 1m
+        labels: {severity: warning}
+        annotations: {summary: 'Container resource sampling is incomplete or stale; lifecycle readiness is independent'}
       - alert: UnexpectedGameExit
         expr: (atlas_instance_state{state=~"exited|dead|missing"} == 1) and on(instance, game_type) (atlas_instance_wanted_running == 1)
         for: 30s

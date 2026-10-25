@@ -1,7 +1,7 @@
 // Labels come only from the validated registry and fixed enumerations.
 const quote = value => JSON.stringify(String(value));
 export class Monitoring {
-  constructor() { this.observed = new Map(); this.outcomes = new Map(); this.durations = new Map(); this.finished = new WeakSet(); this.exits = new Map(); this.resources = new Map(); this.streamUp = false; this.lastReconcile = 0; }
+  constructor() { this.observed = new Map(); this.outcomes = new Map(); this.durations = new Map(); this.finished = new WeakSet(); this.exits = new Map(); this.resources = new Map(); this.streamUp = false; this.lastReconcile = 0; this.samplingReady = false; this.lastSampling = 0; }
   observe(id, state, desired) {
     const previous = this.observed.get(id);
     if (previous === 'running' && ['exited', 'dead', 'missing'].includes(state) && desired !== 'wanted_stopped') {
@@ -24,6 +24,8 @@ export class Monitoring {
     emit('atlas_controller_ready', Number(service.ready));
     emit('atlas_docker_events_connected', Number(this.streamUp));
     emit('atlas_reconcile_timestamp_seconds', this.lastReconcile);
+    emit('atlas_resource_sampling_ready', Number(this.samplingReady));
+    emit('atlas_resource_sampling_timestamp_seconds', this.lastSampling);
     emit('atlas_controller_active_operations', service.locks.size);
     emit('atlas_controller_audit_pending', service.failedAudits.size);
     for (const [resource, capacity] of Object.entries(service.capacity)) {
@@ -60,27 +62,58 @@ export class Monitoring {
 // Events are hints only: inspect the approved registry, never trust event labels.
 // Periodic reconciliation repairs event gaps; one pass at a time bounds work.
 export class LifecycleObserver {
-  constructor(service, client, { intervalMs = 15000, retryMs = 1000 } = {}) {
+  constructor(service, client, { intervalMs = 15000, retryMs = 1000, sampleTimeoutMs = 5000 } = {}) {
+    if (!Number.isSafeInteger(sampleTimeoutMs) || sampleTimeoutMs < 1 || sampleTimeoutMs > 2147483647) throw new Error('Invalid sample timeout');
     this.service = service; this.client = client; this.intervalMs = intervalMs; this.retryMs = retryMs;
+    this.sampleTimeoutMs = sampleTimeoutMs; this.samples = new Map();
     this.stopped = true; this.pending = false;
+  }
+  async sample(entry) {
+    // A deadline is not cancellation. Keep ownership until the underlying read
+    // settles, even if a transport ignores abort, so polls cannot pile up reads.
+    if (this.samples.has(entry.id)) throw new Error('Sample still pending');
+    const controller = new AbortController();
+    let rejectAbort;
+    const aborted = new Promise((_, reject) => { rejectAbort = () => reject(new Error('Sample aborted')); });
+    controller.signal.addEventListener('abort', rejectAbort, { once: true });
+    const timer = setTimeout(() => controller.abort(), this.sampleTimeoutMs);
+    const work = Promise.resolve().then(async () => {
+      const { container } = await this.service.docker.inspect(entry);
+      if (this.stopped || controller.signal.aborted) throw new Error('Sample aborted');
+      return container.stats({ stream: false, abortSignal: controller.signal });
+    });
+    const sample = { controller, work };
+    this.samples.set(entry.id, sample);
+    const release = () => { if (this.samples.get(entry.id) === sample) this.samples.delete(entry.id); };
+    void work.then(release, release);
+    try { return await Promise.race([work, aborted]); }
+    finally { clearTimeout(timer); controller.signal.removeEventListener('abort', rejectAbort); }
   }
   async refresh() {
     if (this.pending || this.stopped) return;
     this.pending = true;
+    this.service.monitoring.samplingReady = false;
     try {
       await this.service.reconcile();
+      // Once reconciliation succeeds, discard all old samples before any
+      // sampling read can stall. Failed reconciliation retains prior evidence.
+      this.service.monitoring.resources.clear();
+      let healthy = true;
       for (const entry of this.service.instances) {
         if (this.stopped) return;
         this.service.monitoring.resources.delete(entry.id);
         if (this.service.monitoring.observed.get(entry.id) !== 'running') continue;
         try {
-          const { container } = await this.service.docker.inspect(entry);
-          if (this.stopped) return;
-          const stats = await container.stats({ stream: false });
+          const stats = await this.sample(entry);
           if (this.stopped) return;
           const memory = stats.memory_stats?.usage, cpu = stats.cpu_stats?.cpu_usage?.total_usage;
-          if (Number.isFinite(memory) && memory >= 0 && Number.isFinite(cpu) && cpu >= 0) this.service.monitoring.resources.set(entry.id, { memory, cpu: cpu / 1e9 });
-        } catch { /* Omit unavailable samples rather than report zero usage. */ }
+          if (!Number.isFinite(memory) || memory < 0 || !Number.isFinite(cpu) || cpu < 0) throw new Error('Invalid resource sample');
+          this.service.monitoring.resources.set(entry.id, { memory, cpu: cpu / 1e9 });
+        } catch { healthy = false; /* Omit unavailable samples rather than report zero usage. */ }
+      }
+      if (!this.stopped) {
+        this.service.monitoring.samplingReady = healthy;
+        this.service.monitoring.lastSampling = Date.now() / 1000;
       }
     } catch { if (!this.stopped) this.service.ready = false; }
     finally { this.pending = false; }
@@ -122,5 +155,10 @@ export class LifecycleObserver {
     } catch { this.service.monitoring.streamUp = false; this.retry(); }
   }
   retry() { if (!this.stopped) { this.retryTimer = setTimeout(() => void this.connect(), this.retryMs); this.retryTimer.unref?.(); } }
-  stop() { this.stopped = true; clearInterval(this.timer); clearTimeout(this.retryTimer); this.stream?.destroy(); this.service.monitoring.streamUp = false; }
+  stop() {
+    this.stopped = true; clearInterval(this.timer); clearTimeout(this.retryTimer); this.stream?.destroy();
+    for (const { controller } of this.samples.values()) controller.abort();
+    this.service.monitoring.streamUp = false; this.service.monitoring.samplingReady = false;
+    this.service.monitoring.resources.clear();
+  }
 }

@@ -41,6 +41,9 @@ test('discovery and dashboards use stable instance labels without game-specific 
   assert.match(read('alerts.yml'), /atlas_instance_wanted_running == 1/);
   assert.match(read('alerts.yml'), /HostMemoryPressure/);
   assert.match(read('alerts.yml'), /AdmissionBudgetPressure/);
+  assert.match(read('alerts.yml'), /alert: ResourceSamplingDegraded\s+expr: atlas_resource_sampling_ready == 0 or time\(\) - atlas_resource_sampling_timestamp_seconds > 90\s+for: 1m/);
+  for (const expr of ['atlas_resource_sampling_ready', 'time() - atlas_resource_sampling_timestamp_seconds'])
+    assert.ok(dashboard.panels.some(panel => panel.targets.some(target => target.expr === expr)));
   const route = JSON.parse(read('grafana-route.example.json'));
   assert.deepEqual(route.http.routers.grafana.entryPoints, ['websecure']);
   assert.equal(route.http.routers.grafana.tls.certResolver, 'letsencrypt');
