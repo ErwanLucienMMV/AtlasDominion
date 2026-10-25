@@ -1,5 +1,17 @@
 # Phase 5 validation
 
+## Adversarial recovery correction
+
+The unchanged Phase 5 adversarial tests reproduced **66 passing and eight failing checks**, confirming four defects: structurally invalid audit records accepted during replay, aggregate chunk limits rejecting valid event batches, sampling continuing after observer shutdown, and negative usage exported as metrics. Reproduction log: `%TEMP%/atlas-phase5-fix-reproduce.log`.
+
+`audit.mjs` now validates each replayed record before using it, including valid calendar timestamps and required field types. Historical second/millisecond timestamps and ignored but structurally valid operations/instances remain readable. Damaged history fails closed and is never rewritten. `monitoring.mjs` now limits each byte frame independently, preserves split UTF-8, checks shutdown after awaited work and before sampling/publication, and accepts only finite nonnegative usage. Already-issued Engine/reconciliation work is not cancelled.
+
+The unchanged adversarial/exposure tests plus existing monitoring tests and seven new independent regressions passed **91 checks**, with no failures/skips/cancellations. Log: `%TEMP%/atlas-phase5-fix-focused.log`. Regressions also cover exact 64 KiB boundaries, oversized complete frames, missing audit fields, impossible dates, legitimate historical records, valid zero usage and shutdown at all three await boundaries. No existing test or CI setting was changed. The untracked adversarial report/tests remain untouched and outside the fix commit.
+
+Final verification: complete `npm test` **598 passed**, zero failed/skipped/cancelled (`%TEMP%/atlas-phase5-fix-full.log`); all **ten Compose checks passed** (`%TEMP%/atlas-phase5-fix-compose.log`); `git diff --check` and staged whitespace checks passed with ordinary LF-to-CRLF notices. Node tests required the previously documented Windows process permission. No deployment, push, dependency change or history rewrite was performed. Existing untracked work is preserved; the correction is committed separately.
+
+Live firewall/TLS isolation, real Engine integration and Prometheus rule semantics remain unverified; this correction does not claim deployment acceptance or introduce any exposure/authentication change.
+
 Implementation is complete locally. No monitoring service, game, image, DNS entry, firewall rule or volume was deployed or modified. Production acceptance remains pending under the [Phase 5 runbook](PHASE_5_MONITORING.md).
 
 ## Delivered and security review

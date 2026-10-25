@@ -70,16 +70,19 @@ export class LifecycleObserver {
     try {
       await this.service.reconcile();
       for (const entry of this.service.instances) {
+        if (this.stopped) return;
         this.service.monitoring.resources.delete(entry.id);
         if (this.service.monitoring.observed.get(entry.id) !== 'running') continue;
         try {
           const { container } = await this.service.docker.inspect(entry);
+          if (this.stopped) return;
           const stats = await container.stats({ stream: false });
+          if (this.stopped) return;
           const memory = stats.memory_stats?.usage, cpu = stats.cpu_stats?.cpu_usage?.total_usage;
-          if (Number.isFinite(memory) && Number.isFinite(cpu)) this.service.monitoring.resources.set(entry.id, { memory, cpu: cpu / 1e9 });
+          if (Number.isFinite(memory) && memory >= 0 && Number.isFinite(cpu) && cpu >= 0) this.service.monitoring.resources.set(entry.id, { memory, cpu: cpu / 1e9 });
         } catch { /* Omit unavailable samples rather than report zero usage. */ }
       }
-    } catch { this.service.ready = false; }
+    } catch { if (!this.stopped) this.service.ready = false; }
     finally { this.pending = false; }
   }
   start() {
@@ -92,14 +95,21 @@ export class LifecycleObserver {
       const stream = await this.client.getEvents({ filters: { type: ['container'] } });
       if (this.stopped) { stream.destroy(); return; }
       this.stream = stream; this.service.monitoring.streamUp = true;
-      let buffer = '';
+      let buffer = Buffer.alloc(0);
       stream.on('data', chunk => {
-        buffer += chunk.toString();
-        if (Buffer.byteLength(buffer) > 65536) { stream.destroy(); return; }
-        let end;
-        while ((end = buffer.indexOf('\n')) !== -1) {
-          const line = buffer.slice(0, end); buffer = buffer.slice(end + 1);
-          try { if (JSON.parse(line).Type === 'container') void this.refresh(); } catch { stream.destroy(); return; }
+        if (this.stopped) return;
+        const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        let offset = 0;
+        while (offset < bytes.length) {
+          const end = bytes.indexOf(10, offset);
+          const part = bytes.subarray(offset, end === -1 ? bytes.length : end);
+          // Bound each frame, not the transport batch. Decode only complete
+          // frames so a split UTF-8 character remains intact.
+          if (buffer.length + part.length > 65536) { stream.destroy(); return; }
+          buffer = Buffer.concat([buffer, part]);
+          if (end === -1) return;
+          try { if (JSON.parse(buffer.toString('utf8')).Type === 'container') void this.refresh(); } catch { stream.destroy(); return; }
+          buffer = Buffer.alloc(0); offset = end + 1;
         }
       });
       let closed = false;
