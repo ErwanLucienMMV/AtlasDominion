@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "zomboid-main",
+  "displayName": "Project Zomboid",
+  "gameType": "zomboid",
+  "container": {
+    "name": "game-zomboid-main",
+    "requiredLabels": {
+      "io.atlasdominion.managed": "true",
+      "io.atlasdominion.instance": "zomboid-main"
+    },
+    "publishedPorts": [
+      {
+        "hostPort": 16261,
+        "containerPort": 16261,
+        "protocol": "udp"
+      },
+      {
+        "hostPort": 16262,
+        "containerPort": 16262,
+        "protocol": "udp"
+      }
+    ]
+  },
+  "adapter": {
+    "lifecycle": "generic",
+    "readiness": "unverified",
+    "stop": "docker-stop",
+    "backup": "stopped-volume"
+  },
+  "resources": {
+    "admissionMemoryMiB": 8192,
+    "admissionCpuUnits": 2,
+    "hardMemoryMiB": 8192
+  },
+  "policy": {
+    "allowedDiscordGuilds": [],
+    "allowedDiscordUsers": [],
+    "allowedDiscordRoles": [],
+    "stopRequiresAdmin": false,
+    "allowAutoRestart": false
+  }
+}

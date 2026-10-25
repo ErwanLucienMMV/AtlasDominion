@@ -1,0 +1,90 @@
+{
+  "name": "atlas-game-palworld-main",
+  "services": {
+    "palworld": {
+      "image": "${PALWORLD_IMAGE:?Set reviewed thijsvanloef/palworld-server-docker image digest}",
+      "platform": "linux/amd64",
+      "pull_policy": "never",
+      "container_name": "game-palworld-main",
+      "restart": "no",
+      "labels": {
+        "io.atlasdominion.managed": "true",
+        "io.atlasdominion.instance": "palworld-main"
+      },
+      "environment": {
+        "PORT": "8211",
+        "QUERY_PORT": "27015",
+        "SERVER_PLATFORM": "Linux",
+        "SERVER_NAME": "Atlas Palworld",
+        "SERVER_PASSWORD": "${PALWORLD_SERVER_PASSWORD:?Set private player password}",
+        "ADMIN_PASSWORD": "${PALWORLD_ADMIN_PASSWORD:?Set private admin password}",
+        "REST_API_ENABLED": "true",
+        "REST_API_PORT": "8212",
+        "RCON_ENABLED": "true",
+        "RCON_PORT": "25575",
+        "COMMUNITY": "false",
+        "UPDATE_ON_BOOT": "false",
+        "AUTO_UPDATE_ENABLED": "false",
+        "AUTO_REBOOT_ENABLED": "false",
+        "BACKUP_ENABLED": "false",
+        "AUTO_PAUSE_ENABLED": "false",
+        "AUTO_SLEEP_ENABLED": "false",
+        "TZ": "UTC"
+      },
+      "user": "1000:1000",
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "mem_limit": "${PALWORLD_MEMORY_LIMIT:?Set measured hard memory limit}",
+      "cpus": "${PALWORLD_CPU_LIMIT:?Set measured CPU limit}",
+      "pids_limit": 1024,
+      "stop_signal": "SIGTERM",
+      "stop_grace_period": "120s",
+      "ports": [
+        {
+          "target": 8211,
+          "published": "8211",
+          "host_ip": "${PALWORLD_BIND_ADDRESS:?Set approved native game bind address}",
+          "protocol": "udp"
+        },
+        {
+          "target": 27015,
+          "published": "27015",
+          "host_ip": "${PALWORLD_BIND_ADDRESS:?Set approved native game bind address}",
+          "protocol": "udp"
+        }
+      ],
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "world",
+          "target": "/palworld"
+        }
+      ],
+      "networks": [
+        "game"
+      ],
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      }
+    }
+  },
+  "volumes": {
+    "world": {
+      "external": true,
+      "name": "${PALWORLD_DATA_VOLUME:?Set approved pre-created data volume}"
+    }
+  },
+  "networks": {
+    "game": {
+      "name": "atlas-game-palworld-main"
+    }
+  }
+}

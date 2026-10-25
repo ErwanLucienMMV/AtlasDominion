@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "vrising-main",
+  "displayName": "V Rising",
+  "gameType": "vrising",
+  "container": {
+    "name": "game-vrising-main",
+    "requiredLabels": {
+      "io.atlasdominion.managed": "true",
+      "io.atlasdominion.instance": "vrising-main"
+    },
+    "publishedPorts": [
+      {
+        "hostPort": 9876,
+        "containerPort": 9876,
+        "protocol": "udp"
+      },
+      {
+        "hostPort": 9877,
+        "containerPort": 9877,
+        "protocol": "udp"
+      }
+    ]
+  },
+  "adapter": {
+    "lifecycle": "generic",
+    "readiness": "unverified",
+    "stop": "docker-stop",
+    "backup": "stopped-volume"
+  },
+  "resources": {
+    "admissionMemoryMiB": 8192,
+    "admissionCpuUnits": 2,
+    "hardMemoryMiB": 8192
+  },
+  "policy": {
+    "allowedDiscordGuilds": [],
+    "allowedDiscordUsers": [],
+    "allowedDiscordRoles": [],
+    "stopRequiresAdmin": false,
+    "allowAutoRestart": false
+  }
+}

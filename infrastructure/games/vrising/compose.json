@@ -1,0 +1,88 @@
+{
+  "name": "atlas-game-vrising-main",
+  "services": {
+    "vrising": {
+      "image": "${VRISING_IMAGE:?Set reviewed trueosiris/vrising image digest}",
+      "platform": "linux/amd64",
+      "pull_policy": "never",
+      "container_name": "game-vrising-main",
+      "restart": "no",
+      "labels": {
+        "io.atlasdominion.managed": "true",
+        "io.atlasdominion.instance": "vrising-main"
+      },
+      "environment": {
+        "HOME": "/home/steam",
+        "WINEPREFIX": "/home/steam/.wine",
+        "SERVERNAME": "Atlas V Rising",
+        "WORLDNAME": "world1",
+        "GAMEPORT": "9876",
+        "QUERYPORT": "9877",
+        "TZ": "UTC"
+      },
+      "user": "1000:1000",
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "mem_limit": "${VRISING_MEMORY_LIMIT:?Set measured hard memory limit}",
+      "cpus": "${VRISING_CPU_LIMIT:?Set measured CPU limit}",
+      "pids_limit": 1024,
+      "stop_signal": "SIGTERM",
+      "stop_grace_period": "120s",
+      "ports": [
+        {
+          "target": 9876,
+          "published": "9876",
+          "host_ip": "${VRISING_BIND_ADDRESS:?Set approved native game bind address}",
+          "protocol": "udp"
+        },
+        {
+          "target": 9877,
+          "published": "9877",
+          "host_ip": "${VRISING_BIND_ADDRESS:?Set approved native game bind address}",
+          "protocol": "udp"
+        }
+      ],
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "world",
+          "target": "/mnt/vrising/persistentdata"
+        },
+        {
+          "type": "volume",
+          "source": "installation",
+          "target": "/mnt/vrising/server"
+        }
+      ],
+      "networks": [
+        "game"
+      ],
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      }
+    }
+  },
+  "volumes": {
+    "world": {
+      "external": true,
+      "name": "${VRISING_DATA_VOLUME:?Set approved pre-created data volume}"
+    },
+    "installation": {
+      "external": true,
+      "name": "${VRISING_INSTALL_VOLUME:?Set separate pre-created installation volume}"
+    }
+  },
+  "networks": {
+    "game": {
+      "name": "atlas-game-vrising-main"
+    }
+  }
+}

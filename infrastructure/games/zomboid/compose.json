@@ -1,0 +1,93 @@
+{
+  "name": "atlas-game-zomboid-main",
+  "services": {
+    "zomboid": {
+      "image": "${ZOMBOID_IMAGE:?Set reviewed renegademaster/zomboid-dedicated-server image digest}",
+      "platform": "linux/amd64",
+      "pull_policy": "never",
+      "container_name": "game-zomboid-main",
+      "restart": "no",
+      "labels": {
+        "io.atlasdominion.managed": "true",
+        "io.atlasdominion.instance": "zomboid-main"
+      },
+      "environment": {
+        "DEFAULT_PORT": "16261",
+        "UDP_PORT": "16262",
+        "RCON_PORT": "27015",
+        "RCON_PASSWORD": "${ZOMBOID_RCON_PASSWORD:?Set private RCON password}",
+        "ADMIN_PASSWORD": "${ZOMBOID_ADMIN_PASSWORD:?Set private admin password}",
+        "SERVER_PASSWORD": "${ZOMBOID_SERVER_PASSWORD:?Set private player password}",
+        "SERVER_NAME": "AtlasZomboid",
+        "GAME_VERSION": "${ZOMBOID_GAME_VERSION:?Set reviewed compatible Steam branch}",
+        "MAX_RAM": "${ZOMBOID_HEAP:?Set JVM heap below memory limit}",
+        "PUBLIC_SERVER": "false",
+        "STEAM_VAC": "true",
+        "TZ": "UTC"
+      },
+      "user": "1000:1000",
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "mem_limit": "${ZOMBOID_MEMORY_LIMIT:?Set measured hard memory limit}",
+      "cpus": "${ZOMBOID_CPU_LIMIT:?Set measured CPU limit}",
+      "pids_limit": 1024,
+      "stop_signal": "SIGTERM",
+      "stop_grace_period": "120s",
+      "ports": [
+        {
+          "target": 16261,
+          "published": "16261",
+          "host_ip": "${ZOMBOID_BIND_ADDRESS:?Set approved native game bind address}",
+          "protocol": "udp"
+        },
+        {
+          "target": 16262,
+          "published": "16262",
+          "host_ip": "${ZOMBOID_BIND_ADDRESS:?Set approved native game bind address}",
+          "protocol": "udp"
+        }
+      ],
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "world",
+          "target": "/home/steam/Zomboid"
+        },
+        {
+          "type": "volume",
+          "source": "installation",
+          "target": "/home/steam/ZomboidDedicatedServer"
+        }
+      ],
+      "networks": [
+        "game"
+      ],
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      }
+    }
+  },
+  "volumes": {
+    "world": {
+      "external": true,
+      "name": "${ZOMBOID_DATA_VOLUME:?Set approved pre-created data volume}"
+    },
+    "installation": {
+      "external": true,
+      "name": "${ZOMBOID_INSTALL_VOLUME:?Set separate pre-created installation volume}"
+    }
+  },
+  "networks": {
+    "game": {
+      "name": "atlas-game-zomboid-main"
+    }
+  }
+}

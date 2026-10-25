@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "palworld-main",
+  "displayName": "Palworld",
+  "gameType": "palworld",
+  "container": {
+    "name": "game-palworld-main",
+    "requiredLabels": {
+      "io.atlasdominion.managed": "true",
+      "io.atlasdominion.instance": "palworld-main"
+    },
+    "publishedPorts": [
+      {
+        "hostPort": 8211,
+        "containerPort": 8211,
+        "protocol": "udp"
+      },
+      {
+        "hostPort": 27015,
+        "containerPort": 27015,
+        "protocol": "udp"
+      }
+    ]
+  },
+  "adapter": {
+    "lifecycle": "generic",
+    "readiness": "unverified",
+    "stop": "docker-stop",
+    "backup": "stopped-volume"
+  },
+  "resources": {
+    "admissionMemoryMiB": 16384,
+    "admissionCpuUnits": 4,
+    "hardMemoryMiB": 16384
+  },
+  "policy": {
+    "allowedDiscordGuilds": [],
+    "allowedDiscordUsers": [],
+    "allowedDiscordRoles": [],
+    "stopRequiresAdmin": false,
+    "allowAutoRestart": false
+  }
+}
