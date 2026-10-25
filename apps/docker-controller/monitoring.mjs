@@ -1,0 +1,109 @@
+// Labels come only from the validated registry and fixed enumerations.
+const quote = value => JSON.stringify(String(value));
+export class Monitoring {
+  constructor() { this.observed = new Map(); this.outcomes = new Map(); this.exits = new Map(); this.resources = new Map(); this.streamUp = false; this.lastReconcile = 0; }
+  observe(id, state, desired) {
+    const previous = this.observed.get(id);
+    if (previous === 'running' && ['exited', 'dead', 'missing'].includes(state) && desired !== 'wanted_stopped') {
+      this.exits.set(id, (this.exits.get(id) ?? 0) + 1);
+    }
+    this.observed.set(id, state);
+  }
+  outcome(op) {
+    const key = `${op.instanceId}:${op.action}:${op.state}`;
+    this.outcomes.set(key, (this.outcomes.get(key) ?? 0) + 1);
+  }
+  render(service) {
+    const lines = [];
+    const emit = (name, value, labels = {}) => lines.push(`${name}${Object.keys(labels).length ? `{${Object.entries(labels).map(([k, v]) => `${k}=${quote(v)}`).join(',')}}` : ''} ${value}`);
+    emit('atlas_controller_ready', Number(service.ready));
+    emit('atlas_docker_events_connected', Number(this.streamUp));
+    emit('atlas_reconcile_timestamp_seconds', this.lastReconcile);
+    emit('atlas_controller_active_operations', service.locks.size);
+    emit('atlas_controller_audit_pending', service.failedAudits.size);
+    for (const [resource, capacity] of Object.entries(service.capacity)) {
+      const field = resource === 'memoryMiB' ? 'admissionMemoryMiB' : 'admissionCpuUnits';
+      emit('atlas_capacity', capacity, { resource });
+      emit('atlas_reserved', service.instances.filter(e => service.reservations.has(e.id)).reduce((n, e) => n + e.resources[field], 0), { resource });
+    }
+    for (const entry of service.instances) {
+      const labels = { instance: entry.id, game_type: entry.gameType };
+      emit('atlas_instance_info', 1, labels);
+      const usage = this.resources.get(entry.id);
+      if (usage) {
+        emit('atlas_container_memory_bytes', usage.memory, labels);
+        emit('atlas_container_cpu_seconds_total', usage.cpu, labels);
+      }
+      const state = this.observed.get(entry.id) ?? 'unknown';
+      for (const candidate of ['created', 'running', 'exited', 'dead', 'missing', 'paused', 'restarting', 'removing', 'unknown'])
+        emit('atlas_instance_state', Number(state === candidate), { ...labels, state: candidate });
+      emit('atlas_instance_unexpected_exits_total', this.exits.get(entry.id) ?? 0, labels);
+      emit('atlas_instance_wanted_running', Number(service.desired.get(entry.id) === 'wanted_running'), labels);
+      const op = service.operations.get(service.locks.get(entry.id));
+      emit('atlas_operation_age_seconds', op ? (Date.now() - Date.parse(op.requestedAt)) / 1000 : 0, labels);
+    }
+    for (const [key, count] of this.outcomes) {
+      const [instance, action, outcome] = key.split(':');
+      emit('atlas_operations_total', count, { instance, action, outcome });
+    }
+    return `${lines.join('\n')}\n`;
+  }
+}
+
+// Events are hints only: inspect the approved registry, never trust event labels.
+// Periodic reconciliation repairs event gaps; one pass at a time bounds work.
+export class LifecycleObserver {
+  constructor(service, client, { intervalMs = 15000, retryMs = 1000 } = {}) {
+    this.service = service; this.client = client; this.intervalMs = intervalMs; this.retryMs = retryMs;
+    this.stopped = true; this.pending = false;
+  }
+  async refresh() {
+    if (this.pending || this.stopped) return;
+    this.pending = true;
+    try {
+      await this.service.reconcile();
+      for (const entry of this.service.instances) {
+        this.service.monitoring.resources.delete(entry.id);
+        if (this.service.monitoring.observed.get(entry.id) !== 'running') continue;
+        try {
+          const { container } = await this.service.docker.inspect(entry);
+          const stats = await container.stats({ stream: false });
+          const memory = stats.memory_stats?.usage, cpu = stats.cpu_stats?.cpu_usage?.total_usage;
+          if (Number.isFinite(memory) && Number.isFinite(cpu)) this.service.monitoring.resources.set(entry.id, { memory, cpu: cpu / 1e9 });
+        } catch { /* Omit unavailable samples rather than report zero usage. */ }
+      }
+    } catch { this.service.ready = false; }
+    finally { this.pending = false; }
+  }
+  start() {
+    this.stopped = false;
+    this.timer = setInterval(() => void this.refresh(), this.intervalMs); this.timer.unref?.();
+    void this.connect(); return this;
+  }
+  async connect() {
+    try {
+      const stream = await this.client.getEvents({ filters: { type: ['container'] } });
+      if (this.stopped) { stream.destroy(); return; }
+      this.stream = stream; this.service.monitoring.streamUp = true;
+      let buffer = '';
+      stream.on('data', chunk => {
+        buffer += chunk.toString();
+        if (Buffer.byteLength(buffer) > 65536) { stream.destroy(); return; }
+        let end;
+        while ((end = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.slice(0, end); buffer = buffer.slice(end + 1);
+          try { if (JSON.parse(line).Type === 'container') void this.refresh(); } catch { stream.destroy(); return; }
+        }
+      });
+      let closed = false;
+      const close = () => {
+        if (closed) return; closed = true; this.service.monitoring.streamUp = false;
+        stream.destroy(); this.retry();
+      };
+      stream.on('error', close); stream.on('end', close); stream.on('close', close);
+      await this.refresh();
+    } catch { this.service.monitoring.streamUp = false; this.retry(); }
+  }
+  retry() { if (!this.stopped) { this.retryTimer = setTimeout(() => void this.connect(), this.retryMs); this.retryTimer.unref?.(); } }
+  stop() { this.stopped = true; clearInterval(this.timer); clearTimeout(this.retryTimer); this.stream?.destroy(); this.service.monitoring.streamUp = false; }
+}

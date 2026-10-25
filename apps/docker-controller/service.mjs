@@ -1,6 +1,7 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { validateRegistry } from '../../libs/server-registry/index.mjs';
 import { Fault, allowed, context } from './security.mjs';
+import { Monitoring } from './monitoring.mjs';
 
 const activeStates = new Set(['running', 'paused', 'restarting', 'removing']);
 function verifyStopped(state, allowCreated = false) {
@@ -16,6 +17,7 @@ export class ControllerService {
     this.locks = new Map(); this.reservations = new Set(); this.operations = new Map(); this.keys = new Map(); this.desired = new Map(); this.ready = false;
     this.admission = Promise.resolve();
     this.failedAudits = new Map();
+    this.monitoring = new Monitoring();
   }
   authorize(id, actor) {
     context(actor);
@@ -30,9 +32,11 @@ export class ControllerService {
       for (const entry of this.instances) {
         try {
           const { data } = await wait(this.docker.inspect(entry));
+          this.monitoring.observe(entry.id, data.State.Status, this.desired.get(entry.id));
           if (activeStates.has(data.State.Status)) this.reservations.add(entry.id); else if (!this.locks.has(entry.id)) this.reservations.delete(entry.id);
         } catch (error) {
           if (error.code !== 'MISSING_CONTAINER') throw error;
+          this.monitoring.observe(entry.id, 'missing', this.desired.get(entry.id));
           if (!this.locks.has(entry.id)) this.reservations.delete(entry.id);
         }
       }
@@ -45,6 +49,7 @@ export class ControllerService {
         } catch (error) { if (error.code === 'TIMEOUT') throw error; }
       }
       this.ready = this.failedAudits.size === 0;
+      this.monitoring.lastReconcile = Date.now() / 1000;
     } catch (error) { this.ready = false; throw error; }
   }
   async status(id, actor) {
@@ -162,10 +167,12 @@ export class ControllerService {
     try {
       await wait(this.record(op, state));
       op.state = state; op.completedAt = new Date().toISOString();
+      this.monitoring.outcome(op);
     } catch (error) {
       op.state = error.code === 'TIMEOUT' ? 'timed_out' : 'failed';
       op.result = null; op.error = error.code ?? 'DOCKER_UNAVAILABLE';
       op.completedAt = new Date().toISOString();
+      this.monitoring.outcome(op);
       // Never later replay an undurable successful completion as success.
       this.failedAudits.set(op.operationId, { timestamp: op.completedAt, instanceId: op.instanceId, operation: op.action, outcome: op.state, error: op.error });
       this.ready = false; throw error;

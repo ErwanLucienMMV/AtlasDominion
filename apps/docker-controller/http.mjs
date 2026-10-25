@@ -30,6 +30,9 @@ export async function createApplication(service, secrets) {
       try {
         authenticate(req.headers.authorization, secrets);
         const path = req.path;
+        if (path === '/metrics' && req.method === 'GET') {
+          return res.type('text/plain; version=0.0.4').send(service.monitoring.render(service));
+        }
         if (path === '/v1/health' && req.method === 'GET') {
           if (req.headers['x-atlas-authorization-context']) throw new Fault('INVALID_REQUEST');
           await service.reconcile();
