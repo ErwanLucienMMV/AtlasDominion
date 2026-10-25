@@ -3,9 +3,25 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { validateRegistry } from '../libs/server-registry/index.mjs';
 import { verifyIdentity } from '../apps/docker-controller/docker.mjs';
+import { validateBackupConfig } from '../apps/backup-worker/worker.mjs';
 
 const read = (game, file) => JSON.parse(readFileSync(new URL(`../infrastructure/games/${game}/${file}`, import.meta.url)));
 const games = ['vrising', 'zomboid', 'palworld'];
+test('Phase 7 backup overlay mounts the matching persistent volumes read-only', () => {
+  const config = JSON.parse(readFileSync(new URL('../infrastructure/backup/phase7.settings.example.json', import.meta.url)));
+  const overlay = JSON.parse(readFileSync(new URL('../infrastructure/backup/phase7.override.json', import.meta.url)));
+  validateBackupConfig(config, games.map(game => read(game, 'instance.example.json')));
+  for (const game of games) {
+    const entry = read(game, 'instance.example.json'), stack = read(game, 'compose.json');
+    const job = config.jobs.find(j => j.instanceId === entry.id);
+    const mount = overlay.services['backup-worker'].volumes.find(m => m.target === job.source);
+    assert.equal(mount.read_only, true);
+    assert.equal(overlay.volumes[mount.source].external, true);
+    assert.equal(overlay.volumes[mount.source].name.split(':?')[0], stack.volumes.world.name.split(':?')[0]);
+    assert.equal(job.containerPath, stack.services[game].volumes[0].target);
+    assert.equal(job.allowRetentionDeletion, false);
+  }
+});
 test('all four game manifests coexist without ownership or native port conflicts', () => {
   assert.equal(validateRegistry(['minecraft', ...games].map(game => read(game, 'instance.example.json'))).length, 4);
 });

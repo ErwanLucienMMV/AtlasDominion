@@ -113,3 +113,27 @@ test('Minecraft Compose resolves native ports, persistent world and explicit ope
     compose(file, missing, false);
   }
 });
+
+for (const [game, prefix, ports, memory] of [
+  ['vrising', 'VRISING', [9876, 9877], 8192],
+  ['zomboid', 'ZOMBOID', [16261, 16262], 8192],
+  ['palworld', 'PALWORLD', [8211, 27015], 16384]
+]) test(`${game} Compose resolves isolated UDP ports and fails closed on missing operator settings`, () => {
+  const env = Object.fromEntries(Object.entries({ IMAGE: `local/${game}@sha256:${'a'.repeat(64)}`,
+    MEMORY_LIMIT: `${memory}m`, CPU_LIMIT: '2', BIND_ADDRESS: '127.0.0.1', DATA_VOLUME: `${game}-validation-data`,
+    INSTALL_VOLUME: `${game}-validation-install`, ADMIN_PASSWORD: 'validation-only', SERVER_PASSWORD: 'validation-only',
+    RCON_PASSWORD: 'validation-only', GAME_VERSION: 'public', HEAP: '4G'
+  }).map(([key, value]) => [`${prefix}_${key}`, value]));
+  const file = `infrastructure/games/${game}/compose.json`, result = compose(file, env);
+  const service = result.services[game];
+  assert.deepEqual(service.ports.map(p => p.target), ports);
+  assert.ok(service.ports.every(p => p.protocol === 'udp' && p.host_ip === '127.0.0.1'));
+  assert.equal(Number(service.mem_limit), memory * 1048576);
+  assert.equal(service.user, '1000:1000');
+  assert.equal(service.stop_grace_period, '2m0s');
+  assert.deepEqual(Object.keys(service.networks), ['game']);
+  for (const volume of Object.values(result.volumes)) assert.equal(volume.external, true);
+  const template = readFileSync(join(root, file), 'utf8');
+  for (const key of new Set([...template.matchAll(/\$\{([A-Z_]+):\?/g)].map(m => m[1])))
+    compose(file, { ...env, [key]: '' }, false);
+});

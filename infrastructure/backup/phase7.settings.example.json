@@ -1,0 +1,41 @@
+{
+  "lockDirectory": "/locks",
+  "bindingAddresses": [
+    "192.0.2.10"
+  ],
+  "jobs": [
+    {
+      "instanceId": "vrising-main",
+      "source": "/sources/vrising-main",
+      "destination": "/archives/vrising-main",
+      "volumeName": "REPLACE_WITH_APPROVED_VRISING_VOLUME",
+      "containerPath": "/mnt/vrising/persistentdata",
+      "intervalSeconds": 86400,
+      "keep": 7,
+      "minimumFreeBytes": 1073741824,
+      "allowRetentionDeletion": false
+    },
+    {
+      "instanceId": "zomboid-main",
+      "source": "/sources/zomboid-main",
+      "destination": "/archives/zomboid-main",
+      "volumeName": "REPLACE_WITH_APPROVED_ZOMBOID_VOLUME",
+      "containerPath": "/home/steam/Zomboid",
+      "intervalSeconds": 86400,
+      "keep": 7,
+      "minimumFreeBytes": 1073741824,
+      "allowRetentionDeletion": false
+    },
+    {
+      "instanceId": "palworld-main",
+      "source": "/sources/palworld-main",
+      "destination": "/archives/palworld-main",
+      "volumeName": "REPLACE_WITH_APPROVED_PALWORLD_VOLUME",
+      "containerPath": "/palworld",
+      "intervalSeconds": 86400,
+      "keep": 7,
+      "minimumFreeBytes": 1073741824,
+      "allowRetentionDeletion": false
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "services": {
+    "backup-worker": {
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "vrising-world",
+          "target": "/sources/vrising-main",
+          "read_only": true
+        },
+        {
+          "type": "volume",
+          "source": "zomboid-world",
+          "target": "/sources/zomboid-main",
+          "read_only": true
+        },
+        {
+          "type": "volume",
+          "source": "palworld-world",
+          "target": "/sources/palworld-main",
+          "read_only": true
+        }
+      ]
+    }
+  },
+  "volumes": {
+    "vrising-world": {
+      "external": true,
+      "name": "${VRISING_DATA_VOLUME:?Set approved existing game data volume}"
+    },
+    "zomboid-world": {
+      "external": true,
+      "name": "${ZOMBOID_DATA_VOLUME:?Set approved existing game data volume}"
+    },
+    "palworld-world": {
+      "external": true,
+      "name": "${PALWORLD_DATA_VOLUME:?Set approved existing game data volume}"
+    }
+  }
+}

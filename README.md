@@ -27,6 +27,8 @@ Node.js 20 or newer; install the pinned application dependencies with `npm ci`.
 
 Phase 6 adds an independent scheduled stopped-volume backup worker, persistent lifecycle exclusion, SHA-256 archives, isolated restoration verification and opt-in retention. See the [backup and recovery runbook](docs/PHASE_6_BACKUP.md) and [validation evidence](docs/PHASE_6_VALIDATION.md). Real Minecraft recovery and deployment remain operator gates.
 
+Phase 7 adds independent V Rising, Project Zomboid and Palworld integration candidates with native UDP mappings, persistent volumes and deny-by-default registry manifests. Existing generic lifecycle, monitoring and backup implementations are reused. See the [game compatibility and live acceptance runbook](docs/PHASE_7_GAMES.md) and [validation evidence](docs/PHASE_7_VALIDATION.md). Image execution, gameplay, graceful saving and game recovery remain unexecuted operator gates; V Rising rootless compatibility needs particular review.
+
 ```sh
 npm test
 npm run validate:registry -- tests/fixtures/instance.json
