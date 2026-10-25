@@ -3,6 +3,10 @@ import { validateRegistry } from '../../libs/server-registry/index.mjs';
 import { Fault, allowed, context } from './security.mjs';
 
 const activeStates = new Set(['running', 'paused', 'restarting', 'removing']);
+function verifyStopped(state, allowCreated = false) {
+  if (!(state.Status === 'exited' || (allowCreated && state.Status === 'created')) || state.OOMKilled ||
+    (state.ExitCode !== undefined && state.ExitCode !== 0)) throw new Fault('OPERATION_CONFLICT');
+}
 export class ControllerService {
   constructor({ instances, docker, policy, capacity, audit, timeoutMs, stopTimeoutSeconds, maxOperations = 10000 }) {
     if (!capacity || !Number.isFinite(capacity.memoryMiB) || capacity.memoryMiB <= 0 || !Number.isFinite(capacity.cpuUnits) || capacity.cpuUnits <= 0 ||
@@ -106,7 +110,8 @@ export class ControllerService {
     };
     try {
       const { data } = await wait(this.docker.inspect(entry));
-      const already = action === 'start' ? data.State.Status === 'running' : ['exited', 'created', 'dead'].includes(data.State.Status);
+      const already = action === 'start' ? data.State.Status === 'running' : ['exited', 'created'].includes(data.State.Status);
+      if (action === 'stop' && already) verifyStopped(data.State, true);
       if (!already && !['running', 'exited', 'created'].includes(data.State.Status)) throw new Fault('OPERATION_CONFLICT');
       if (action === 'start' && !already) {
         // Await reconciliation while holding the instance lock, then reserve synchronously.
@@ -174,7 +179,9 @@ export class ControllerService {
       try { if (op.action === 'start') await container.start(); else await container.stop({ t: this.stopTimeoutSeconds }); }
       catch (error) { if (error.statusCode !== 304) throw new Fault('DOCKER_UNAVAILABLE'); }
       const { data } = await this.docker.inspect(entry, pinnedId);
-      if (op.action === 'start' ? data.State.Status !== 'running' : !['exited', 'created', 'dead'].includes(data.State.Status)) throw new Fault('OPERATION_CONFLICT');
+      if (op.action === 'start') {
+        if (data.State.Status !== 'running') throw new Fault('OPERATION_CONFLICT');
+      } else verifyStopped(data.State);
       if (op.action === 'stop') this.reservations.delete(entry.id); else this.reservations.add(entry.id);
     })();
     try {

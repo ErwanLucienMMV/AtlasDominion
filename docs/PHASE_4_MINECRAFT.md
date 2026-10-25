@@ -51,4 +51,8 @@ Native game traffic bypasses Traefik. Only 25565/TCP is published; no RCON/query
 
 The controller contains no Minecraft branches or arbitrary exec/provisioning operation. Other compatible games and multiple instances remain registry/Compose configuration changes, following the existing onboarding workflow. This concrete stack has fixed identity and port: a second instance needs its own reviewed project, container name, labels, native host port, volume and manifest. Do not reuse the example identity twice.
 
+Runtime identity verification now rejects explicit root/default-root execution, host or container-shared namespaces, reserved management networks, Docker socket mounts and sensitive host system binds. This supplements deployment review; it does not establish exact per-instance mount/network/user ownership. Existing containers violating these restrictions fail identity verification and require separately reviewed provisioning corrections. The controller never modifies their configuration automatically.
+
+Stops ending in a reported nonzero exit, OOM kill, `dead` or an unexpected state fail with sanitized `OPERATION_CONFLICT`; they do not emit completed audit records. A subsequent fresh stop cannot relabel an abnormal exit as `already_stopped`. An exit-zero stop can complete but still does not certify world-save integrity. Keep the live log and persistence gates above.
+
 Local tests use a mock Engine and mock Discord webhook delivery. They cannot establish real Dockerode/Engine compatibility, image execution, graceful world saving, external Discord delivery, gameplay or world persistence. Phase 5 adds monitoring, Docker events and reconciliation; Phase 6 adds backups. Neither is silently introduced here.

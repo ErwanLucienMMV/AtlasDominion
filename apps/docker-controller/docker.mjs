@@ -1,10 +1,34 @@
 import { Fault } from './security.mjs';
+import { posix } from 'node:path';
+
+const managementNetworks = new Set(['control', 'proxy', 'monitoring', 'atlas-control', 'atlas-proxy', 'atlas-monitoring']);
+const hostSystemPaths = ['/', '/run', '/var/run', '/etc', '/proc', '/sys', '/dev', '/boot', '/var/lib/docker', '/var/lib/containerd'];
+function unsafeMount(mount) {
+  const paths = [mount.Source, mount.Destination].filter(value => typeof value === 'string').map(value => posix.normalize(value));
+  if (paths.some(value => posix.basename(value) === 'docker.sock')) return true;
+  if (mount.Type !== 'bind') return false;
+  const source = typeof mount.Source === 'string' ? posix.normalize(mount.Source) : '/';
+  return hostSystemPaths.some(path => source === path || (path !== '/' && source.startsWith(`${path}/`)));
+}
+
+function unsafeIsolation(data) {
+  const host = data.HostConfig ?? {};
+  const shared = mode => mode === 'host' || mode?.startsWith('container:');
+  const user = data.Config?.User;
+  // Docker supplies User="" for the default root identity.
+  const account = typeof user === 'string' ? user.split(':')[0].trim() : undefined;
+  return shared(host.NetworkMode) || shared(host.PidMode) || shared(host.IpcMode) ||
+    (account !== undefined && (account === '' || account === 'root' || /^0+$/.test(account))) ||
+    (data.Mounts ?? []).some(unsafeMount) ||
+    managementNetworks.has(host.NetworkMode) ||
+    Object.keys(data.NetworkSettings?.Networks ?? {}).some(name => managementNetworks.has(name));
+}
 
 export function verifyIdentity(instance, data, bindingAddresses) {
   if (!data.Id || data.Name !== `/${instance.container.name}` ||
     Object.entries(instance.container.requiredLabels).some(([key, value]) => data.Config?.Labels?.[key] !== value) ||
     data.HostConfig?.RestartPolicy?.Name !== 'no' || data.HostConfig?.NetworkMode === 'host' ||
-    data.HostConfig?.PublishAllPorts || data.HostConfig?.Privileged) throw new Fault('IDENTITY_MISMATCH');
+    data.HostConfig?.PublishAllPorts || data.HostConfig?.Privileged || unsafeIsolation(data)) throw new Fault('IDENTITY_MISMATCH');
   const expected = instance.container.publishedPorts.map(p => `${p.containerPort}/${p.protocol}:${p.hostPort}`).sort();
   const actual = [];
   for (const [port, bindings] of Object.entries(data.HostConfig?.PortBindings ?? {})) {
