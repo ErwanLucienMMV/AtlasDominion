@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { Controller, Module, Post, Req, Res } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import express from 'express';
+import { boundedHandler, hardenHttpServer } from '../../libs/http-safety.mjs';
 import { publicKey, signed, actor, allowed, RateLimit, validateConfig } from './security.mjs';
 import { command } from './service.mjs';
 import { message } from './commands.mjs';
@@ -34,6 +35,7 @@ export async function createDiscordApplication(service, configuration) {
       if (reservation === 'accepted') setImmediate(() => { void service.complete(interaction, selection, identity); });
     }
   }
+  Interactions.prototype.handle = boundedHandler(Interactions.prototype.handle);
   Controller()(Interactions);
   Post('discord/interactions')(Interactions.prototype, 'handle', Object.getOwnPropertyDescriptor(Interactions.prototype, 'handle'));
   Req()(Interactions.prototype, 'handle', 0); Res()(Interactions.prototype, 'handle', 1);
@@ -42,5 +44,5 @@ export async function createDiscordApplication(service, configuration) {
   const app = await NestFactory.create(ApplicationModule, { logger: false, bodyParser: false });
   app.use(express.raw({ type: 'application/json', limit: '64kb', inflate: false }));
   app.use((error, req, res, next) => { if (error) res.status(400).json({ code: 'INVALID_REQUEST' }); else next(); });
-  await app.init(); return app;
+  await app.init(); hardenHttpServer(app.getHttpServer()); return app;
 }

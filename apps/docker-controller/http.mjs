@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { Controller, Module, All, Req, Res } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import express from 'express';
+import { boundedHandler, hardenHttpServer } from '../../libs/http-safety.mjs';
 import { Fault, authenticate, context, allowed } from './security.mjs';
 
 export function page(items, query) {
@@ -69,6 +70,7 @@ export async function createApplication(service, secrets, metricsSecrets = secre
       }
     }
   }
+  Api.prototype.handle = boundedHandler(Api.prototype.handle);
   Controller()(Api);
   All('{*path}')(Api.prototype, 'handle', Object.getOwnPropertyDescriptor(Api.prototype, 'handle'));
   Req()(Api.prototype, 'handle', 0); Res()(Api.prototype, 'handle', 1);
@@ -83,5 +85,5 @@ export async function createApplication(service, secrets, metricsSecrets = secre
   app.use((error, req, res, next) => {
     if (error) res.status(400).json({ code: 'INVALID_REQUEST', message: 'INVALID_REQUEST' }); else next();
   });
-  await app.init(); return app;
+  await app.init(); hardenHttpServer(app.getHttpServer()); return app;
 }

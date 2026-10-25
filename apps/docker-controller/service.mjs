@@ -10,9 +10,11 @@ function verifyStopped(state, allowCreated = false) {
     (state.ExitCode !== undefined && state.ExitCode !== 0)) throw new Fault('OPERATION_CONFLICT');
 }
 export class ControllerService {
-  constructor({ instances, docker, policy, capacity, audit, timeoutMs, stopTimeoutSeconds, maxOperations = 10000, backupLockDirectory }) {
+  constructor({ instances, docker, policy, capacity, audit, timeoutMs, stopTimeoutSeconds, maxOperations = 10000, maxPendingRequests = 100, backupLockDirectory }) {
     if (!capacity || !Number.isFinite(capacity.memoryMiB) || capacity.memoryMiB <= 0 || !Number.isFinite(capacity.cpuUnits) || capacity.cpuUnits <= 0 ||
       !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || !Number.isSafeInteger(stopTimeoutSeconds) || stopTimeoutSeconds < 1 || timeoutMs <= stopTimeoutSeconds * 1000) throw new Error('Explicit capacity and timeouts required');
+    if (![maxOperations, maxPendingRequests].every(value => Number.isSafeInteger(value) && value > 0)) throw new Error('Positive operation and admission limits required');
+    this.maxPendingRequests = maxPendingRequests; this.pendingRequests = 0;
     this.instances = validateRegistry(instances); this.docker = docker; this.policy = policy; this.capacity = capacity; this.audit = audit;
     this.timeoutMs = timeoutMs; this.stopTimeoutSeconds = stopTimeoutSeconds; this.maxOperations = maxOperations;
     this.locks = new Map(); this.reservations = new Set(); this.operations = new Map(); this.keys = new Map(); this.desired = new Map(); this.ready = false;
@@ -82,9 +84,12 @@ export class ControllerService {
     }
   }
   async request(id, action, request) {
+    if (this.pendingRequests >= this.maxPendingRequests) throw new Fault('RESOURCE_EXHAUSTED');
+    this.pendingRequests++;
     const pending = this.admission.then(() => this.requestLocked(id, action, request));
     this.admission = pending.catch(() => {});
-    return pending;
+    try { return await pending; }
+    finally { this.pendingRequests--; }
   }
   async requestLocked(id, action, request) {
     if (!request || Object.keys(request).sort().join() !== 'authorization,idempotencyKey' ||
@@ -193,6 +198,9 @@ export class ControllerService {
     let timer, timedOut = false;
     const work = (async () => {
       const { container } = await this.docker.inspect(entry, pinnedId);
+      // A transport deadline cannot cancel an inspection. Never begin a new
+      // mutation when that inspection returns after the operation timed out.
+      if (timedOut) throw new Fault('TIMEOUT');
       op.state = op.action === 'start' ? 'starting' : 'stopping';
       try { if (op.action === 'start') await container.start(); else await container.stop({ t: this.stopTimeoutSeconds }); }
       catch (error) { if (error.statusCode !== 304) throw new Fault('DOCKER_UNAVAILABLE'); }
