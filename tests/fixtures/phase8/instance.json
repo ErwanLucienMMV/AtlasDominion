@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "nebula-lab",
+  "displayName": "Nebula Laboratory (synthetic fixture)",
+  "gameType": "nebula-sandbox",
+  "container": {
+    "name": "mock-nebula-lab",
+    "requiredLabels": {
+      "io.atlasdominion.managed": "true",
+      "io.atlasdominion.instance": "nebula-lab"
+    },
+    "publishedPorts": [{ "hostPort": 31000, "containerPort": 7777, "protocol": "udp" }]
+  },
+  "adapter": { "lifecycle": "generic", "readiness": "unverified", "stop": "docker-stop", "backup": "stopped-volume" },
+  "resources": { "admissionMemoryMiB": 64, "admissionCpuUnits": 1, "hardMemoryMiB": 128 },
+  "policy": {
+    "allowedDiscordGuilds": [], "allowedDiscordUsers": [], "allowedDiscordRoles": [],
+    "stopRequiresAdmin": false, "allowAutoRestart": false
+  }
+}
