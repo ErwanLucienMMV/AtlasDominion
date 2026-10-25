@@ -29,6 +29,8 @@ Phase 6 adds an independent scheduled stopped-volume backup worker, persistent l
 
 Phase 7 adds independent V Rising, Project Zomboid and Palworld integration candidates with native UDP mappings, persistent volumes and deny-by-default registry manifests. Existing generic lifecycle, monitoring and backup implementations are reused. See the [game compatibility and live acceptance runbook](docs/PHASE_7_GAMES.md) and [validation evidence](docs/PHASE_7_VALIDATION.md). Image execution, gameplay, graceful saving and game recovery remain unexecuted operator gates; V Rising rootless compatibility needs particular review.
 
+Phase 8 verifies extensibility with an invented game manifest and 50 mock instances, covering API/Discord discovery, generic lifecycle, metrics, verified backup, resource admission, polling and error handling without core application changes. See the [acceptance mapping and limitations](docs/PHASE_8_EXTENSIBILITY.md) and [validation evidence](docs/PHASE_8_VALIDATION.md). No additional real game is deployed.
+
 ```sh
 npm test
 npm run validate:registry -- tests/fixtures/instance.json
