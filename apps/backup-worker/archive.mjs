@@ -2,7 +2,8 @@ import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, readdir, lstat, readFile, writeFile, statfs } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
 import { createHash } from 'node:crypto';
-import { join, resolve, sep } from 'node:path';
+import { join, resolve } from 'node:path';
+import { pathsOverlap } from '../../libs/filesystem-paths.mjs';
 
 const safe = name => typeof name === 'string' && name.length > 0 && !name.includes('\\') && !name.includes(':') && !name.includes('\0') && name.split('/').every(p => p && p !== '.' && p !== '..');
 async function digest(path) {
@@ -24,7 +25,7 @@ export async function inventory(root, prefix = '') {
   return entries;
 }
 export async function createArchive(source, destination, instanceId, minimumFreeBytes = 0) {
-  if (resolve(destination).startsWith(resolve(source) + sep) || resolve(destination) === resolve(source)) throw new Error('Archive overlaps source');
+  if (pathsOverlap(source, destination)) throw new Error('Archive overlaps source');
   const entries = await inventory(source);
   const space = await statfs(resolve(destination, '..'));
   if (space.bavail * space.bsize < entries.reduce((n, e) => n + (e.size ?? 0), 0) * 2 + minimumFreeBytes) throw new Error('Insufficient backup capacity');
@@ -41,6 +42,8 @@ export async function createArchive(source, destination, instanceId, minimumFree
   return manifest;
 }
 export async function verifyArchive(archive, instanceId) {
+  const root = await lstat(archive);
+  if (!root.isDirectory() || root.isSymbolicLink()) throw new Error('Unsafe archive root');
   const manifest = JSON.parse(await readFile(join(archive, 'manifest.json'), 'utf8'));
   if (manifest.version !== 1 || manifest.instanceId !== instanceId || !Array.isArray(manifest.entries) ||
     manifest.entries.some(e => !safe(e.path)) || new Set(manifest.entries.map(e => e.path)).size !== manifest.entries.length) throw new Error('Invalid manifest');

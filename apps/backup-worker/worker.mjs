@@ -1,9 +1,17 @@
 import { mkdir, writeFile, readdir, readFile, rm, lstat } from 'node:fs/promises';
-import { join, isAbsolute, resolve, sep } from 'node:path';
+import { join, isAbsolute, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { acquireInstanceLock } from '../../libs/instance-lock.mjs';
 import { validateRegistry } from '../../libs/server-registry/index.mjs';
 import { createArchive, restoreArchive, verifyArchive } from './archive.mjs';
+import { pathsOverlap } from '../../libs/filesystem-paths.mjs';
+
+async function verifiedMarker(archive, instanceId) {
+  const marker = JSON.parse(await readFile(join(archive, 'verified.json'), 'utf8'));
+  if (!marker || marker.instanceId !== instanceId || typeof marker.restoredAt !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(marker.restoredAt) ||
+    !Number.isFinite(Date.parse(marker.restoredAt)) || new Date(marker.restoredAt).toISOString() !== marker.restoredAt) throw new Error('Invalid restore marker');
+}
 
 export function validateBackupConfig(config, instances) {
   validateRegistry(instances);
@@ -20,7 +28,7 @@ export function validateBackupConfig(config, instances) {
   }
   paths.push(resolve(config.lockDirectory));
   for (let a = 0; a < paths.length; a++) for (let b = a + 1; b < paths.length; b++) {
-    if (paths[a] === paths[b] || paths[a].startsWith(paths[b] + sep) || paths[b].startsWith(paths[a] + sep)) throw new Error('Overlapping backup paths');
+    if (pathsOverlap(paths[a], paths[b])) throw new Error('Overlapping backup paths');
   }
   return structuredClone(config);
 }
@@ -31,45 +39,49 @@ export class BackupWorker {
   }
   async run(job) {
     const entry = this.instances.find(e => e.id === job.instanceId);
-    let release;
+    let release, archive, name;
     try {
-      release = await acquireInstanceLock(this.config.lockDirectory, entry.id);
-      const { data } = await this.docker.inspect(entry);
-      const stopped = state => state.Status === 'exited' && state.ExitCode === 0 && !state.OOMKilled;
-      if (!stopped(data.State)) throw new Error('Clean stopped server required');
-      // The source must be an operator-approved mounted volume; container mount identity is checked too.
-      if (!job.volumeName || !data.Mounts?.some(m => m.Type === 'volume' && m.Name === job.volumeName && m.Destination === job.containerPath)) throw new Error('Backup volume mismatch');
-      const root = join(job.destination, entry.id);
-      await mkdir(root, { recursive: true });
-      if ((await lstat(root)).isSymbolicLink()) throw new Error('Unsafe archive root');
-      const name = `${Date.now()}-${randomUUID()}`, archive = join(root, name);
-      await createArchive(job.source, archive, entry.id, job.minimumFreeBytes);
-      const after = await this.docker.inspect(entry, data.Id);
-      if (!stopped(after.data.State)) throw new Error('Server state changed');
-      const restored = join(archive, 'restore-test');
-      await restoreArchive(archive, restored, entry.id);
-      await rm(restored, { recursive: true });
-      await writeFile(join(archive, 'verified.json'), JSON.stringify({ instanceId: entry.id, restoredAt: new Date().toISOString() }), { flag: 'wx' });
-      await this.retain(root, job, name);
+      try {
+        release = await acquireInstanceLock(this.config.lockDirectory, entry.id);
+        const { data } = await this.docker.inspect(entry);
+        const stopped = state => state.Status === 'exited' && state.ExitCode === 0 && !state.OOMKilled;
+        if (!stopped(data.State)) throw new Error('Clean stopped server required');
+        // The source must be an operator-approved mounted volume; container mount identity is checked too.
+        if (!job.volumeName || !data.Mounts?.some(m => m.Type === 'volume' && m.Name === job.volumeName && m.Destination === job.containerPath)) throw new Error('Backup volume mismatch');
+        const root = join(job.destination, entry.id);
+        await mkdir(root, { recursive: true });
+        if ((await lstat(root)).isSymbolicLink()) throw new Error('Unsafe archive root');
+        name = `${Date.now()}-${randomUUID()}`; archive = join(root, name);
+        await createArchive(job.source, archive, entry.id, job.minimumFreeBytes);
+        const after = await this.docker.inspect(entry, data.Id);
+        if (!stopped(after.data.State)) throw new Error('Server state changed');
+        const restored = join(archive, 'restore-test');
+        await restoreArchive(archive, restored, entry.id);
+        await rm(restored, { recursive: true });
+        await writeFile(join(archive, 'verified.json'), JSON.stringify({ instanceId: entry.id, restoredAt: new Date().toISOString() }), { flag: 'wx' });
+        await this.retain(root, job, name);
+      } finally { if (release) await release(); }
       this.report({ instanceId: entry.id, outcome: 'verified', archive: name });
       return archive;
     } catch (error) {
       this.report({ instanceId: entry.id, outcome: 'failed' }); throw error;
-    } finally { if (release) await release(); }
+    }
   }
   async retain(root, job, replacement) {
     if (!job.allowRetentionDeletion) return;
     await verifyArchive(join(root, replacement), job.instanceId);
+    await verifiedMarker(join(root, replacement), job.instanceId);
     const verified = [];
     for (const name of (await readdir(root)).sort().reverse()) {
       if (!/^\d{13}-[a-f0-9-]{36}$/.test(name) || (await lstat(join(root, name))).isSymbolicLink()) continue;
       try {
-        const marker = JSON.parse(await readFile(join(root, name, 'verified.json'), 'utf8'));
-        if (marker.instanceId !== job.instanceId) continue;
+        await verifiedMarker(join(root, name), job.instanceId);
         await verifyArchive(join(root, name), job.instanceId); verified.push(name);
       } catch { /* Preserve damaged or incomplete evidence. */ }
     }
-    for (const name of verified.slice(job.keep)) if (name !== replacement) await rm(join(root, name), { recursive: true });
+    // The newly restore-tested replacement always occupies one retained slot,
+    // independently of clock rollback or equal-millisecond UUID ordering.
+    for (const name of verified.filter(name => name !== replacement).slice(job.keep - 1)) await rm(join(root, name), { recursive: true });
   }
   async tick(now = Date.now()) {
     if (this.active || this.stopped) return;

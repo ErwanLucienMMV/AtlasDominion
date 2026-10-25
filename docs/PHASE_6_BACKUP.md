@@ -20,6 +20,10 @@ Scheduling is serial with no overlapping ticks, minimum 60-second intervals and 
 
 Retention deletion defaults off. Enabling `allowRetentionDeletion` is explicit approval of that job's retention policy. Pruning considers only recognized archive names with restore markers and currently valid inventories, only after a new restore-tested replacement. It preserves unknown, damaged and incomplete evidence. Review disk usage separately because retained failures can fill storage. Cleanup of a worker-created temporary restoration removes only that generated directory. On-host copies do not protect against host or array loss.
 
+Restore markers must include the matching instance and a valid canonical UTC restoration timestamp before retention can count or delete them. A damaged replacement marker blocks pruning. The replacement always occupies one retained slot, even after wall-clock rollback or equal-millisecond archive naming. Archive-root links are rejected before reading manifests; ancestor directories remain trusted. Overlap checks use native path semantics, including Windows case aliases and filesystem roots.
+
+An archive's `verified.json` records byte restoration, while the worker's `verified` outcome also requires successful lock release. If release fails, the worker reports `failed` and preserves the lock and verified archive for investigation. A restore marker alone does not mean lifecycle ownership was released.
+
 ## Recovery and Minecraft acceptance
 
 1. Approve and gracefully stop Minecraft through existing lifecycle controls. Verify exit zero, no OOM and expected persistent volume. Do not accept a forced kill as a consistent world backup.
