@@ -2,6 +2,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { validateRegistry } from '../../libs/server-registry/index.mjs';
 import { Fault, allowed, context } from './security.mjs';
 import { Monitoring } from './monitoring.mjs';
+import { acquireInstanceLock } from '../../libs/instance-lock.mjs';
 
 const activeStates = new Set(['running', 'paused', 'restarting', 'removing']);
 function verifyStopped(state, allowCreated = false) {
@@ -9,7 +10,7 @@ function verifyStopped(state, allowCreated = false) {
     (state.ExitCode !== undefined && state.ExitCode !== 0)) throw new Fault('OPERATION_CONFLICT');
 }
 export class ControllerService {
-  constructor({ instances, docker, policy, capacity, audit, timeoutMs, stopTimeoutSeconds, maxOperations = 10000 }) {
+  constructor({ instances, docker, policy, capacity, audit, timeoutMs, stopTimeoutSeconds, maxOperations = 10000, backupLockDirectory }) {
     if (!capacity || !Number.isFinite(capacity.memoryMiB) || capacity.memoryMiB <= 0 || !Number.isFinite(capacity.cpuUnits) || capacity.cpuUnits <= 0 ||
       !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || !Number.isSafeInteger(stopTimeoutSeconds) || stopTimeoutSeconds < 1 || timeoutMs <= stopTimeoutSeconds * 1000) throw new Error('Explicit capacity and timeouts required');
     this.instances = validateRegistry(instances); this.docker = docker; this.policy = policy; this.capacity = capacity; this.audit = audit;
@@ -18,6 +19,12 @@ export class ControllerService {
     this.admission = Promise.resolve();
     this.failedAudits = new Map();
     this.monitoring = new Monitoring();
+    this.backupLockDirectory = backupLockDirectory; this.diskLocks = new Map();
+  }
+  async unlock(id) {
+    const release = this.diskLocks.get(id);
+    if (release) { await release(); this.diskLocks.delete(id); }
+    this.locks.delete(id);
   }
   authorize(id, actor) {
     context(actor);
@@ -93,6 +100,10 @@ export class ControllerService {
     if (!this.ready) throw new Fault('DOCKER_UNAVAILABLE');
     if (this.locks.has(id)) throw new Fault('OPERATION_CONFLICT');
     if (this.operations.size >= this.maxOperations) throw new Fault('RESOURCE_EXHAUSTED');
+    if (this.backupLockDirectory) {
+      try { this.diskLocks.set(id, await acquireInstanceLock(this.backupLockDirectory, id)); }
+      catch { throw new Fault('OPERATION_CONFLICT'); }
+    }
     const op = { operationId: randomUUID(), instanceId: id, action, state: 'queued', requestedAt: new Date().toISOString(), completedAt: null, result: null, error: null };
     this.locks.set(id, op.operationId);
     const deadline = Date.now() + this.timeoutMs;
@@ -132,7 +143,7 @@ export class ControllerService {
       this.desired.set(id, action === 'start' ? 'wanted_running' : 'wanted_stopped');
       if (already) {
         op.result = action === 'start' ? 'already_running' : 'already_stopped';
-        await this.finish(op, 'completed', wait); this.locks.delete(id);
+        await this.finish(op, 'completed', wait); await this.unlock(id);
         return { status: 200, operation: structuredClone(op) };
       }
       // Do not retain caller identity or idempotency key in asynchronous work.
@@ -143,8 +154,8 @@ export class ControllerService {
         this.ready = false;
         // Timeout is not cancellation. No preflight continuation can mutate
         // Docker; retain ownership until its outstanding dependency settles.
-        void Promise.allSettled([...pending]).then(() => { this.locks.delete(id); });
-      } else this.locks.delete(id);
+        void Promise.allSettled([...pending]).then(() => this.unlock(id)).catch(() => { this.ready = false; });
+      } else await this.unlock(id);
       // Engine/identity failures require reconciliation before further admission.
       if (!(error instanceof Fault) || ['DOCKER_UNAVAILABLE', 'IDENTITY_MISMATCH', 'PORT_MISMATCH'].includes(error.code)) this.ready = false;
       throw error instanceof Fault ? error : new Fault('DOCKER_UNAVAILABLE');
@@ -201,7 +212,7 @@ export class ControllerService {
       clearTimeout(timer);
       // A timeout is not cancellation. Keep lock and reservation until Docker settles.
       await work.catch(() => {});
-      this.locks.delete(entry.id);
+      await this.unlock(entry.id);
       try { await this.reconcile(); } catch { this.ready = false; }
     }
   }
