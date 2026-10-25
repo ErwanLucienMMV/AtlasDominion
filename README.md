@@ -25,6 +25,8 @@ Phase 5 adds authenticated instance metrics, Docker event watching, periodic rec
 
 Node.js 20 or newer; install the pinned application dependencies with `npm ci`.
 
+Phase 6 adds an independent scheduled stopped-volume backup worker, persistent lifecycle exclusion, SHA-256 archives, isolated restoration verification and opt-in retention. See the [backup and recovery runbook](docs/PHASE_6_BACKUP.md) and [validation evidence](docs/PHASE_6_VALIDATION.md). Real Minecraft recovery and deployment remain operator gates.
+
 ```sh
 npm test
 npm run validate:registry -- tests/fixtures/instance.json

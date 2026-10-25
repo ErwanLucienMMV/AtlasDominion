@@ -1,0 +1,7 @@
+{
+  "services": {
+    "docker-controller": {
+      "volumes": [{"type": "bind", "source": "${BACKUP_LOCK_DIRECTORY:?Set same shared backup lock directory}", "target": "/locks", "bind": {"create_host_path": false}}]
+    }
+  }
+}

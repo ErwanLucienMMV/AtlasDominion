@@ -12,6 +12,8 @@ export function validateBackupConfig(config, instances) {
   for (const job of config.jobs) {
     if (!instances.some(e => e.id === job.instanceId && e.adapter.backup === 'stopped-volume') || ids.has(job.instanceId) ||
       !isAbsolute(job.source ?? '') || !isAbsolute(job.destination ?? '') || !Number.isSafeInteger(job.intervalSeconds) || job.intervalSeconds < 60 ||
+      typeof job.volumeName !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(job.volumeName) ||
+      typeof job.containerPath !== 'string' || !job.containerPath.startsWith('/') || job.containerPath.split('/').some(p => p === '..' || p === '.') ||
       !Number.isSafeInteger(job.keep) || job.keep < 1 || !Number.isSafeInteger(job.minimumFreeBytes) || job.minimumFreeBytes < 0 ||
       typeof job.allowRetentionDeletion !== 'boolean') throw new Error('Invalid backup job');
     ids.add(job.instanceId); paths.push(resolve(job.source), resolve(job.destination));

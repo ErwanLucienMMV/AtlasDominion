@@ -1,0 +1,15 @@
+{
+  "lockDirectory": "/locks",
+  "bindingAddresses": ["192.0.2.10"],
+  "jobs": [{
+    "instanceId": "minecraft-survival",
+    "source": "/sources/minecraft-survival",
+    "destination": "/archives",
+    "volumeName": "REPLACE_WITH_APPROVED_MINECRAFT_VOLUME",
+    "containerPath": "/data",
+    "intervalSeconds": 86400,
+    "keep": 7,
+    "minimumFreeBytes": 1073741824,
+    "allowRetentionDeletion": false
+  }]
+}

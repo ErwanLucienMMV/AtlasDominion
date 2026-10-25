@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { acquireInstanceLock } from '../libs/instance-lock.mjs';
 import { createArchive, restoreArchive, verifyArchive } from '../apps/backup-worker/archive.mjs';
 import { BackupWorker, validateBackupConfig } from '../apps/backup-worker/worker.mjs';
+import { ControllerService } from '../apps/docker-controller/service.mjs';
 const instance = JSON.parse(await readFile(new URL('./fixtures/instance.json', import.meta.url)));
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'atlas-phase6-'));
@@ -61,4 +62,39 @@ test('retention is opt-in and preserves the verified replacement', async () => {
   const f = await fixture(); await f.worker.run(f.job); await f.worker.run(f.job);
   const root = join(f.job.destination, instance.id); assert.equal((await readdir(root)).length, 2);
   await f.worker.run({ ...f.job, allowRetentionDeletion: true }); assert.equal((await readdir(root)).length, 1);
+});
+test('controller restart cannot start a world while the persistent backup lock exists', async () => {
+  const f = await fixture();
+  const actor = { guildId: '123456789012345678', userId: '223456789012345678', roleIds: [] };
+  const policy = { allowedDiscordGuilds: [actor.guildId], allowedDiscordUsers: [actor.userId], allowedDiscordRoles: [] };
+  const entry = structuredClone(instance); Object.assign(entry.policy, policy);
+  let starts = 0;
+  const service = new ControllerService({ instances: [entry], policy, backupLockDirectory: f.lockDirectory,
+    docker: { inspect: async () => ({ data: f.data, container: { start: async () => starts++ } }) },
+    audit: { append: async () => {} }, capacity: { memoryMiB: 10000, cpuUnits: 8 }, timeoutMs: 5000, stopTimeoutSeconds: 1 });
+  const release = await acquireInstanceLock(f.lockDirectory, instance.id); await service.reconcile();
+  await assert.rejects(service.request(instance.id, 'start', { authorization: actor, idempotencyKey: 'test-backup-lock' .padEnd(16, 'x') }), /OPERATION_CONFLICT/);
+  assert.equal(starts, 0); await release();
+  const result = await service.request(instance.id, 'stop', { authorization: actor, idempotencyKey: 'test-release-lock' });
+  assert.equal(result.operation.result, 'already_stopped');
+  const again = await acquireInstanceLock(f.lockDirectory, instance.id); await again();
+});
+test('manifest traversal and wrong-instance archives are rejected before creating restore output', async () => {
+  const f = await fixture(), archive = join(f.job.destination, 'archive');
+  await createArchive(f.job.source, archive, instance.id);
+  await assert.rejects(restoreArchive(archive, join(f.root, 'wrong-instance'), 'other-instance'));
+  const manifest = JSON.parse(await readFile(join(archive, 'manifest.json')));
+  manifest.entries[0].path = '../escape'; await writeFile(join(archive, 'manifest.json'), JSON.stringify(manifest));
+  await assert.rejects(restoreArchive(archive, join(f.root, 'unsafe'), instance.id), /manifest/);
+  assert.equal((await readdir(f.root)).includes('unsafe'), false);
+});
+test('low disk headroom fails before creating an archive', async () => {
+  const f = await fixture();
+  await assert.rejects(createArchive(f.job.source, join(f.job.destination, 'no-space'), instance.id, Number.MAX_SAFE_INTEGER), /capacity/);
+  assert.deepEqual(await readdir(f.job.destination), []);
+});
+test('unfamiliar compatible game instance reuses worker without a game-specific branch', async () => {
+  const f = await fixture(), entry = structuredClone(instance); entry.gameType = 'fixture-unknown-game';
+  const worker = new BackupWorker({ config: f.worker.config, instances: [entry], docker: f.worker.docker, report: () => {} });
+  assert.ok(await worker.run(f.job));
 });

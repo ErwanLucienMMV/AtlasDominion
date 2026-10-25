@@ -1,0 +1,32 @@
+{
+  "name": "atlas-backup",
+  "services": {
+    "backup-worker": {
+      "image": "${BACKUP_IMAGE:?Set reviewed pinned backup image}",
+      "pull_policy": "never",
+      "command": ["node", "apps/backup-worker/main.mjs"],
+      "user": "${BACKUP_UID:?Set approved volume reader UID}:${BACKUP_GID:?Set approved volume reader GID}",
+      "group_add": ["${DOCKER_SOCKET_GID:?Set reviewed socket group}"],
+      "restart": "unless-stopped",
+      "read_only": true,
+      "cap_drop": ["ALL"],
+      "security_opt": ["no-new-privileges:true"],
+      "network_mode": "none",
+      "pids_limit": 128,
+      "mem_limit": "256m",
+      "cpus": "0.5",
+      "stop_grace_period": "5m",
+      "environment": {"BACKUP_CONFIG_FILE": "/config/settings.json", "REGISTRY_DIRECTORY": "/registry"},
+      "volumes": [
+        {"type": "bind", "source": "${BACKUP_CONFIG_FILE:?Set protected settings file}", "target": "/config/settings.json", "read_only": true, "bind": {"create_host_path": false}},
+        {"type": "bind", "source": "${REGISTRY_DIRECTORY:?Set approved registry directory}", "target": "/registry", "read_only": true, "bind": {"create_host_path": false}},
+        {"type": "bind", "source": "/var/run/docker.sock", "target": "/var/run/docker.sock", "read_only": true, "bind": {"create_host_path": false}},
+        {"type": "volume", "source": "world", "target": "/sources/minecraft-survival", "read_only": true},
+        {"type": "bind", "source": "${BACKUP_DIRECTORY:?Set pre-created approved archive directory}", "target": "/archives", "bind": {"create_host_path": false}},
+        {"type": "bind", "source": "${BACKUP_LOCK_DIRECTORY:?Set shared pre-created lock directory}", "target": "/locks", "bind": {"create_host_path": false}}
+      ],
+      "logging": {"driver": "local", "options": {"max-size": "5m", "max-file": "2"}}
+    }
+  },
+  "volumes": {"world": {"external": true, "name": "${MINECRAFT_DATA_VOLUME:?Set approved persistent world volume}"}}
+}

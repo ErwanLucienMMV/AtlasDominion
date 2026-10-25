@@ -7,6 +7,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "start:backup": "node apps/backup-worker/main.mjs",
     "start:discord": "node apps/discord-api/main.mjs",
     "start:controller": "node apps/docker-controller/main.mjs",
     "test": "node --test",
