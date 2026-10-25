@@ -18,7 +18,7 @@ test('signed Discord -> authenticated controller -> pinned Docker lifecycle, rep
   Object.assign(instance.policy, policy);
   const data = { Id: 'preprovisioned-minecraft-id', Name: `/${instance.container.name}`,
     Config: { Labels: instance.container.requiredLabels }, State: { Status: 'created' },
-    HostConfig: { RestartPolicy: { Name: 'no' }, Memory: 6144 * 1048576,
+    HostConfig: { CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], RestartPolicy: { Name: 'no' }, Memory: 6144 * 1048576,
       PortBindings: { '25565/tcp': [{ HostIp: '127.0.0.1', HostPort: '25565' }] } } };
   const calls = [], audit = [];
   const docker = new DockerAccess({ getContainer: name => {

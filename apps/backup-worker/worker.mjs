@@ -45,9 +45,11 @@ export class BackupWorker {
         release = await acquireInstanceLock(this.config.lockDirectory, entry.id);
         const { data } = await this.docker.inspect(entry);
         const stopped = state => state.Status === 'exited' && state.ExitCode === 0 && !state.OOMKilled;
+        const approvedVolume = snapshot => job.volumeName && snapshot.Mounts?.some(m =>
+          m.Type === 'volume' && m.Name === job.volumeName && m.Destination === job.containerPath);
         if (!stopped(data.State)) throw new Error('Clean stopped server required');
         // The source must be an operator-approved mounted volume; container mount identity is checked too.
-        if (!job.volumeName || !data.Mounts?.some(m => m.Type === 'volume' && m.Name === job.volumeName && m.Destination === job.containerPath)) throw new Error('Backup volume mismatch');
+        if (!approvedVolume(data)) throw new Error('Backup volume mismatch');
         const root = join(job.destination, entry.id);
         await mkdir(root, { recursive: true });
         if ((await lstat(root)).isSymbolicLink()) throw new Error('Unsafe archive root');
@@ -55,6 +57,7 @@ export class BackupWorker {
         await createArchive(job.source, archive, entry.id, job.minimumFreeBytes);
         const after = await this.docker.inspect(entry, data.Id);
         if (!stopped(after.data.State)) throw new Error('Server state changed');
+        if (!approvedVolume(after.data)) throw new Error('Backup volume mismatch');
         const restored = join(archive, 'restore-test');
         await restoreArchive(archive, restored, entry.id);
         await rm(restored, { recursive: true });

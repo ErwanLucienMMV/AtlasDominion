@@ -25,7 +25,7 @@ for (const [game, containerPath, saveFile] of cases) test(`${game}: Discord sele
   await writeFile(join(source, saveFile), `${game} mock persistent marker`);
   const data = { Id: `pinned-${game}`, Name: `/${entry.container.name}`, Config: { User: '1000:1000', Labels: entry.container.requiredLabels },
     State: { Status: 'created', ExitCode: 0 }, Mounts: [{ Type: 'volume', Name: `${game}-world`, Destination: containerPath }],
-    HostConfig: { RestartPolicy: { Name: 'no' }, Memory: entry.resources.hardMemoryMiB * 1048576,
+    HostConfig: { CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], RestartPolicy: { Name: 'no' }, Memory: entry.resources.hardMemoryMiB * 1048576,
       PortBindings: Object.fromEntries(entry.container.publishedPorts.map(p => [`${p.containerPort}/${p.protocol}`, [{ HostIp: '127.0.0.1', HostPort: String(p.hostPort) }]])) } };
   const calls = [], audit = [];
   const docker = new DockerAccess({ getContainer: name => {

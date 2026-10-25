@@ -17,7 +17,18 @@ function unsafeIsolation(data) {
   const user = data.Config?.User;
   // Docker supplies User="" for the default root identity.
   const account = typeof user === 'string' ? user.split(':')[0].trim() : undefined;
-  return shared(host.NetworkMode) || shared(host.PidMode) || shared(host.IpcMode) ||
+  // Enforce the restrictions declared by every approved game template. Missing
+  // required controls must not silently inherit a less restrictive daemon default.
+  const emptyOptionalList = value => value == null || (Array.isArray(value) && value.length === 0);
+  const noNewPrivileges = option => /^no-new-privileges(?:(?:=|:)true)?$/.test(option);
+  const options = host.SecurityOpt;
+  const unsafeSecurity = !Array.isArray(options) || options.some(option => typeof option !== 'string') ||
+    !options.some(noNewPrivileges) || options.some(option =>
+      (option.startsWith('no-new-privileges') && !noNewPrivileges(option)) || /^seccomp(?:=|:)unconfined$/.test(option));
+  return !emptyOptionalList(host.CapAdd) || !Array.isArray(host.CapDrop) ||
+    !host.CapDrop.some(capability => typeof capability === 'string' && capability.toUpperCase() === 'ALL') ||
+    unsafeSecurity || ['Devices', 'DeviceRequests', 'DeviceCgroupRules'].some(key => !emptyOptionalList(host[key])) ||
+    shared(host.NetworkMode) || shared(host.PidMode) || shared(host.IpcMode) ||
     (account !== undefined && (account === '' || account === 'root' || /^0+$/.test(account))) ||
     (data.Mounts ?? []).some(unsafeMount) ||
     managementNetworks.has(host.NetworkMode) ||

@@ -19,3 +19,22 @@ No Docker game image was acquired or executed, no services/volumes were provisio
 Each game still requires the runbook's recorded image/build compatibility, external gameplay, save/stop/start persistence, live monitoring and isolated restored-game acceptance. V Rising's upstream root assumptions make non-root startup a specific unresolved deployment blocker. Palworld installation symlinks may require a reviewed saves-only volume before its strict backup strategy is usable. Steam-downloaded binaries are not pinned by the image digest; V Rising/Zomboid startup updates need explicit operational review. These limitations are gates, not passing results.
 
 Two implementation milestones are committed separately: configuration/compatibility runbook, followed by runtime/backup integration verification and validation evidence. Commits are spaced by at least two real minutes, with no fabricated timestamps. Existing untracked work remains outside these commits. Nothing is pushed.
+
+## Corrective validation after adversarial review — 2026-10-25
+
+The initial implementation evidence above predates the adversarial findings. The 151 supplied Phase 7 adversarial tests reproduced exactly 18 failures: five missing runtime isolation checks for each game, plus post-copy volume consistency for each game. Those failures are addressed in `apps/docker-controller/docker.mjs` and `apps/backup-worker/worker.mjs`; see the updated [runtime enforcement and compatibility notes](PHASE_7_GAMES.md). The supplied adversarial report is retained as historical evidence.
+
+Runtime verification now requires dropping all capabilities, no capability additions and enabled no-new-privileges. It rejects explicitly unconfined seccomp, mapped devices, device requests and device cgroup grants. Required controls cannot be omitted; optional empty/null grant lists and Docker's accepted no-new-privileges spellings remain compatible. The backup worker repeats the approved volume type/name/destination check after copying, before creating a verification marker. Drift leaves an unverified archive and a failed report, preserves source bytes and releases the lifecycle lock.
+
+Legacy inspection fixtures now explicitly declare safe capability/privilege controls so their original identity, port, lifecycle and monitoring assertions continue testing the intended boundaries. No assertions, tests or CI checks were removed, skipped or weakened. Four previously untracked legacy fixture/test files (Phase 2 harness and Phase 4–6 adversarial suites) are included with these additive fixture updates so the reviewed test state is traceable. The supplied Phase 7 test/helper files and historical report are also included. Other untracked work remains untouched and excluded.
+
+Executed on the final application/test code:
+
+- Supplied Phase 7 adversarial suites plus `tests/phase7-security-regressions.test.mjs`: **172 passed**, zero failures/skips. The additional 21 tests cover null/missing/malformed controls, conflicting privilege options, legacy seccomp syntax, device requests/rules and post-copy mount name/type/destination/disappearance. Archive evidence, missing verification markers, unchanged source bytes and released ownership are asserted.
+- `npm test`: **898 passed**, zero failures/skips/cancelled/TODO. All 877 previously present tests and 21 added regression checks pass.
+- `npm run check:infrastructure`: **11 passed**, zero failures/skips. Configuration rendering only; no images or services started.
+- `git diff --check`: passed; Git emits only its existing LF-to-CRLF normalization warnings.
+
+Full and focused TAP output is retained under the OS temporary directory as `atlas-phase7-fix-full.txt`, `atlas-phase7-fix-focused.txt` and `atlas-phase7-fix-compose.txt`. Node commands used the previously required Windows sandbox exception for workspace path resolution. No production containers, data, firewall configuration, remote branches or services were changed. No push was performed.
+
+These changes close the tested inspection and simulated mount-consistency gaps. They do not prove a container escape was possible or replace live image, gameplay, save integrity, kernel isolation and game restoration acceptance. Existing containers lacking the required isolation now fail verification and require separately approved provisioning review; there is no automatic container modification or exemption.

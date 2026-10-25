@@ -53,7 +53,7 @@ for (const game of games) test(`${game}: isolated persistent stack matches runti
   assert.deepEqual(entry.adapter, { lifecycle: 'generic', readiness: 'unverified', stop: 'docker-stop', backup: 'stopped-volume' });
   for (const name of ['allowedDiscordGuilds', 'allowedDiscordUsers', 'allowedDiscordRoles']) assert.deepEqual(entry.policy[name], []);
   const data = { Id: `mock-${game}`, Name: `/${entry.container.name}`, Config: { User: service.user, Labels: service.labels },
-    HostConfig: { RestartPolicy: { Name: service.restart }, Memory: entry.resources.hardMemoryMiB * 1048576,
+    HostConfig: { CapDrop: service.cap_drop, SecurityOpt: service.security_opt, RestartPolicy: { Name: service.restart }, Memory: entry.resources.hardMemoryMiB * 1048576,
       PortBindings: Object.fromEntries(service.ports.map(p => [`${p.target}/${p.protocol}`, [{ HostIp: '127.0.0.1', HostPort: p.published }]])) },
     NetworkSettings: { Networks: { [stack.networks.game.name]: {} } } };
   assert.doesNotThrow(() => verifyIdentity(entry, data, ['127.0.0.1']));

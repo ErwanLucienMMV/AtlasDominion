@@ -10,7 +10,7 @@ import { DockerAccess, verifyIdentity } from '../apps/docker-controller/docker.m
 const fixture = JSON.parse(readFileSync(new URL('./fixtures/instance.json', import.meta.url)));
 export function inspection(instance = fixture, state = 'exited') {
   return { Id: `id-${instance.id}`, Name: `/${instance.container.name}`, Config: { Labels: instance.container.requiredLabels }, State: { Status: state },
-    HostConfig: { RestartPolicy: { Name: 'no' }, PortBindings: Object.fromEntries(instance.container.publishedPorts.map(p => [`${p.containerPort}/${p.protocol}`, [{ HostPort: String(p.hostPort), HostIp: '0.0.0.0' }]])) } };
+    HostConfig: { CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], RestartPolicy: { Name: 'no' }, PortBindings: Object.fromEntries(instance.container.publishedPorts.map(p => [`${p.containerPort}/${p.protocol}`, [{ HostPort: String(p.hostPort), HostIp: '0.0.0.0' }]])) } };
 }
 test('authentication and guild/user intersection fail closed', () => {
   authenticate(`Bearer ${'a'.repeat(64)}`, ['a'.repeat(64)]);
