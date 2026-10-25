@@ -31,6 +31,8 @@ Phase 7 adds independent V Rising, Project Zomboid and Palworld integration cand
 
 Phase 8 verifies extensibility with an invented game manifest and 50 mock instances, covering API/Discord discovery, generic lifecycle, metrics, verified backup, resource admission, polling and error handling without core application changes. See the [acceptance mapping and limitations](docs/PHASE_8_EXTENSIBILITY.md) and [validation evidence](docs/PHASE_8_VALIDATION.md). No additional real game is deployed.
 
+Phase 9 adds bounded HTTP/admission work, timeout-safe Docker mutation, infrastructure resource ceilings, automated CI and synthetic daemon/restart/restore drills. See [production safeguards](docs/PHASE_9_HARDENING.md), [validation and acceptance mapping](docs/PHASE_9_VALIDATION.md) and [disaster recovery](docs/RECOVERY.md). Live reboot, external exposure, gameplay restore, alert delivery and production sizing remain operator acceptance gates.
+
 ```sh
 npm test
 npm run validate:registry -- tests/fixtures/instance.json
