@@ -13,7 +13,8 @@
     "test": "node --test",
     "validate:registry": "node scripts/validate-registry.mjs",
     "render:infrastructure": "node scripts/render-infrastructure.mjs",
-    "check:infrastructure": "node --test infrastructure/checks/compose.check.mjs"
+    "check:infrastructure": "node --test infrastructure/checks/compose.check.mjs",
+    "check:production": "node --test infrastructure/checks/compose.check.mjs infrastructure/checks/monitoring.check.mjs infrastructure/checks/backup.check.mjs"
   },
   "overrides": {
     "multer": "2.5.0"

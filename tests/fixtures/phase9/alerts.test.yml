@@ -1,0 +1,46 @@
+rule_files:
+  - ../../../infrastructure/monitoring/alerts.yml
+evaluation_interval: 30s
+tests:
+  - name: deliberate-stop-is-quiet-and-crash-alerts
+    interval: 30s
+    input_series:
+      - series: 'atlas_instance_state{instance="stopped",game_type="unknown",state="exited"}'
+        values: '1+0x10'
+      - series: 'atlas_instance_wanted_running{instance="stopped",game_type="unknown"}'
+        values: '0+0x10'
+      - series: 'atlas_instance_state{instance="crashed",game_type="unknown",state="exited"}'
+        values: '1+0x10'
+      - series: 'atlas_instance_wanted_running{instance="crashed",game_type="unknown"}'
+        values: '1+0x10'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: UnexpectedGameExit
+        exp_alerts:
+          - exp_labels: {instance: crashed, game_type: unknown, state: exited, severity: warning}
+            exp_annotations: {summary: 'Instance intended to run is stopped or missing'}
+  - name: daemon-and-sampler-failures-are-visible
+    interval: 30s
+    input_series:
+      - series: 'atlas_controller_ready'
+        values: '0+0x10'
+      - series: 'atlas_resource_sampling_ready'
+        values: '0+0x10'
+      - series: 'atlas_docker_events_connected'
+        values: '0+0x10'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ControllerUnavailable
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations: {summary: 'Controller unavailable or audit/Engine reconciliation unhealthy'}
+      - eval_time: 3m
+        alertname: ResourceSamplingDegraded
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: 'Container resource sampling is incomplete or stale; lifecycle readiness is independent'}
+      - eval_time: 3m
+        alertname: DockerEventsDisconnected
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations: {summary: 'Docker event stream disconnected; periodic reconciliation remains active'}

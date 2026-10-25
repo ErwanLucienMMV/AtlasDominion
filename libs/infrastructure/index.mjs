@@ -62,6 +62,7 @@ export function renderInfrastructure(config) {
     name: 'atlas-edge',
     services: {
       traefik: {
+        mem_limit: '256m', cpus: '0.5', pids_limit: 128,
         image: traefikImage, pull_policy: 'never', restart: 'unless-stopped',
         command: ['--configFile=/etc/traefik/traefik.yml'],
         read_only: true, cap_drop: ['ALL'], cap_add: ['NET_BIND_SERVICE'],

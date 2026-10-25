@@ -1,0 +1,42 @@
+name: Verification
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  application:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: git diff --check
+  infrastructure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      # Configuration rendering only: never starts services or pulls game images.
+      - run: docker compose version
+      - run: npm run check:production
+      - name: Install Prometheus verification tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends prometheus
+      - run: promtool check rules infrastructure/monitoring/alerts.yml
+      - run: promtool test rules tests/fixtures/phase9/alerts.test.yml
