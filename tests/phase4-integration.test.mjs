@@ -17,8 +17,9 @@ test('signed Discord -> authenticated controller -> pinned Docker lifecycle, rep
   const instance = JSON.parse(readFileSync(new URL('../infrastructure/games/minecraft/instance.example.json', import.meta.url)));
   Object.assign(instance.policy, policy);
   const data = { Id: 'preprovisioned-minecraft-id', Name: `/${instance.container.name}`,
-    Config: { Labels: instance.container.requiredLabels }, State: { Status: 'created' },
-    HostConfig: { CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], RestartPolicy: { Name: 'no' }, Memory: 6144 * 1048576,
+    Config: { User: '1000:1000', Labels: instance.container.requiredLabels }, State: { Status: 'created' },
+    NetworkSettings: { Networks: { [`atlas-game-${instance.id}`]: {} } },
+    HostConfig: { NanoCpus: 2e9, PidsLimit: 1024, NetworkMode: `atlas-game-${instance.id}`, CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], RestartPolicy: { Name: 'no' }, Memory: 6144 * 1048576,
       PortBindings: { '25565/tcp': [{ HostIp: '127.0.0.1', HostPort: '25565' }] } } };
   const calls = [], audit = [];
   const docker = new DockerAccess({ getContainer: name => {

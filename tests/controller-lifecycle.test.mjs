@@ -11,7 +11,8 @@ function setup({ count = 2, capacity = 20000, delay = 0, timeout = 10000 } = {})
     const e = structuredClone(fixture); e.id = `server-${i}`; e.container.name = `container-${i}`;
     e.container.requiredLabels['io.atlasdominion.instance'] = e.id; e.container.publishedPorts[0].hostPort += i; Object.assign(e.policy, policy); return e;
   });
-  const data = instances.map(e => ({ Id: `docker-${e.id}`, Name: `/${e.container.name}`, Config: { Labels: e.container.requiredLabels }, State: { Status: 'exited' }, HostConfig: { CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], RestartPolicy: { Name: 'no' }, PortBindings: { '25565/tcp': [{ HostPort: String(e.container.publishedPorts[0].hostPort), HostIp: '0.0.0.0' }] } } }));
+  const data = instances.map(e => ({ Id: `docker-${e.id}`, Name: `/${e.container.name}`, Config: { User: '1000:1000', Labels: e.container.requiredLabels }, State: { Status: 'exited' }, NetworkSettings: { Networks: { [`atlas-game-${e.id}`]: {} } },
+    HostConfig: { NanoCpus: 2e9, PidsLimit: 1024, NetworkMode: `atlas-game-${e.id}`, CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], RestartPolicy: { Name: 'no' }, PortBindings: { '25565/tcp': [{ HostPort: String(e.container.publishedPorts[0].hostPort), HostIp: '0.0.0.0' }] } } }));
   let starts = 0; const events = [];
   const docker = new DockerAccess({ getContainer: name => {
     const d = data.find(d => d.Id === name || d.Name === `/${name}`);

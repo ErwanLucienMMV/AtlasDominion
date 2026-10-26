@@ -15,8 +15,9 @@ export function manifest(i = 0) {
   };
 }
 export function inspection(entry) {
-  return { Id: `pinned-${entry.id}`, Name: `/${entry.container.name}`, Config: { Labels: structuredClone(entry.container.requiredLabels) }, State: { Status: 'exited' },
-    HostConfig: { CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], RestartPolicy: { Name: 'no' }, Privileged: false, PublishAllPorts: false, NetworkMode: 'game-private',
+  return { Id: `pinned-${entry.id}`, Name: `/${entry.container.name}`, Config: { User: '1000:1000', Labels: structuredClone(entry.container.requiredLabels) }, State: { Status: 'exited' },
+    NetworkSettings: { Networks: { [`atlas-game-${entry.id}`]: {} } },
+    HostConfig: { NanoCpus: 2e9, PidsLimit: 1024, CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], RestartPolicy: { Name: 'no' }, Privileged: false, PublishAllPorts: false, NetworkMode: `atlas-game-${entry.id}`,
       PortBindings: { '7777/udp': [{ HostIp: '127.0.0.1', HostPort: String(entry.container.publishedPorts[0].hostPort) }] } } };
 }
 export function deferred() { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; }

@@ -12,7 +12,7 @@ export function fixture(game) {
     State: { Status: 'exited', ExitCode: 0, OOMKilled: false },
     Mounts: [{ Type: 'volume', Name: `${game}-world`, Destination: service.volumes[0].target, RW: true }],
     NetworkSettings: { Networks: { [stack.networks.game.name]: {} } },
-    HostConfig: { NetworkMode: stack.networks.game.name, RestartPolicy: { Name: 'no' },
+    HostConfig: { NanoCpus: 2e9, PidsLimit: 1024, NetworkMode: stack.networks.game.name, RestartPolicy: { Name: 'no' },
       CapDrop: ['ALL'], CapAdd: [], SecurityOpt: ['no-new-privileges:true'], Devices: [],
       Memory: entry.resources.hardMemoryMiB * 1048576,
       PortBindings: Object.fromEntries(entry.container.publishedPorts.map(p =>

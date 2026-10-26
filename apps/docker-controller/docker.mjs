@@ -32,17 +32,29 @@ function unsafeIsolation(data) {
     !host.CapDrop.some(capability => typeof capability === 'string' && capability.toUpperCase() === 'ALL') ||
     unsafeSecurity || ['Devices', 'DeviceRequests', 'DeviceCgroupRules'].some(key => !emptyOptionalList(host[key])) ||
     shared(host.NetworkMode) || shared(host.PidMode) || shared(host.IpcMode) ||
-    (account !== undefined && (account === '' || account === 'root' || /^0+$/.test(account))) ||
+    (account === undefined || account === '' || account === 'root' || /^0+$/.test(account)) ||
     (data.Mounts ?? []).some(unsafeMount) ||
     managementNetworks.has(host.NetworkMode) ||
     Object.keys(data.NetworkSettings?.Networks ?? {}).some(name => managementNetworks.has(name));
 }
 
 export function verifyIdentity(instance, data, bindingAddresses) {
+  const host = data.HostConfig ?? {};
+  const positiveInteger = value => Number.isSafeInteger(value) && value > 0;
+  const cpuBounded = positiveInteger(host.NanoCpus) ||
+    (positiveInteger(host.CpuQuota) && positiveInteger(host.CpuPeriod));
+  const networks = data.NetworkSettings?.Networks;
+  const permitted = instance.container.allowedNetworks ?? [`atlas-game-${instance.id}`];
+  const attached = networks && typeof networks === 'object' && !Array.isArray(networks) ? Object.keys(networks) : [];
+  const unsafeNetwork = !Array.isArray(permitted) || permitted.length === 0 ||
+    permitted.some(name => typeof name !== 'string' || managementNetworks.has(name) || ['bridge', 'host', 'none', 'default'].includes(name)) ||
+    attached.length !== permitted.length || attached.some(name => !permitted.includes(name)) ||
+    !permitted.includes(host.NetworkMode);
   if (!data.Id || data.Name !== `/${instance.container.name}` ||
     Object.entries(instance.container.requiredLabels).some(([key, value]) => data.Config?.Labels?.[key] !== value) ||
     data.HostConfig?.RestartPolicy?.Name !== 'no' || data.HostConfig?.NetworkMode === 'host' ||
-    data.HostConfig?.PublishAllPorts || data.HostConfig?.Privileged || unsafeIsolation(data)) throw new Fault('IDENTITY_MISMATCH');
+    data.HostConfig?.PublishAllPorts || data.HostConfig?.Privileged || unsafeIsolation(data) ||
+    !cpuBounded || !positiveInteger(host.PidsLimit) || unsafeNetwork) throw new Fault('IDENTITY_MISMATCH');
   const expected = instance.container.publishedPorts.map(p => `${p.containerPort}/${p.protocol}:${p.hostPort}`).sort();
   const actual = [];
   for (const [port, bindings] of Object.entries(data.HostConfig?.PortBindings ?? {})) {

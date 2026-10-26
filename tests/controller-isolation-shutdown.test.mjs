@@ -14,7 +14,7 @@ function inspection() {
     State: { Status: 'running', ExitCode: 0, OOMKilled: false },
     Mounts: [{ Type: 'volume', Name: 'world', Destination: '/data' }],
     NetworkSettings: { Networks: { 'atlas-game-minecraft-survival': {} } },
-    HostConfig: { CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], RestartPolicy: { Name: 'no' }, Memory: 6144 * 1048576,
+    HostConfig: { NanoCpus: 2e9, PidsLimit: 1024, NetworkMode: `atlas-game-${instance.id}`, CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], RestartPolicy: { Name: 'no' }, Memory: 6144 * 1048576,
       PortBindings: { '25565/tcp': [{ HostIp: '127.0.0.1', HostPort: '25565' }] } } };
 }
 for (const user of ['', 'root', 'root:1000', '0', '000:1000']) test(`reject root identity ${JSON.stringify(user)}`, () => {

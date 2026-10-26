@@ -56,7 +56,7 @@ function inspection() {
     State: { Status: 'exited', ExitCode: 0, OOMKilled: false },
     Mounts: [{ Type: 'volume', Name: 'reviewed-world', Destination: '/data', RW: true }],
     NetworkSettings: { Networks: { 'atlas-game-minecraft-survival': {} } },
-    HostConfig: { CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], RestartPolicy: { Name: 'no' }, Memory: 6144 * 1048576,
+    HostConfig: { NanoCpus: 2e9, PidsLimit: 1024, CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], RestartPolicy: { Name: 'no' }, Memory: 6144 * 1048576,
       NetworkMode: 'atlas-game-minecraft-survival', Privileged: false, PublishAllPorts: false,
       PortBindings: { '25565/tcp': [{ HostIp: '127.0.0.1', HostPort: '25565' }] } } };
 }

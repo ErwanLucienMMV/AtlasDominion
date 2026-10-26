@@ -35,6 +35,11 @@ export function validateRegistry(instances) {
   const ids = new Set(), names = new Set(), ports = new Set();
   for (const instance of instances) {
     check(instance, instanceSchema);
+    const networks = instance.container.allowedNetworks;
+    if (networks && (networks.length === 0 || networks.some(name =>
+      ['bridge', 'host', 'none', 'default', 'control', 'proxy', 'monitoring', 'atlas-control', 'atlas-proxy', 'atlas-monitoring'].includes(name)))) {
+      throw new Error('Invalid registry network approval');
+    }
     if (instance.container.requiredLabels['io.atlasdominion.instance'] !== instance.id) throw new Error('Instance label mismatch');
     if (ids.has(instance.id) || names.has(instance.container.name)) throw new Error('Duplicate instance or container ownership');
     ids.add(instance.id); names.add(instance.container.name);

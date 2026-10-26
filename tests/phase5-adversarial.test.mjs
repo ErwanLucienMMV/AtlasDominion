@@ -153,7 +153,8 @@ for (const [name, mutate] of [
   service.docker = new DockerAccess({ getContainer() { return {
     async inspect() {
       const data = { Id: 'pinned-approved-id', Name: `/${entry.container.name}`, Config: { Labels: structuredClone(entry.container.requiredLabels), User: '1000:1000' },
-        State: { Status: 'running' }, HostConfig: { CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], RestartPolicy: { Name: 'no' }, NetworkMode: 'game-only',
+        State: { Status: 'running' }, NetworkSettings: { Networks: { [`atlas-game-${entry.id}`]: {} } },
+        HostConfig: { NanoCpus: 2e9, PidsLimit: 1024, CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], RestartPolicy: { Name: 'no' }, NetworkMode: `atlas-game-${entry.id}`,
           Memory: entry.resources.hardMemoryMiB === null ? 0 : entry.resources.hardMemoryMiB * 1048576,
           PortBindings: { [`${port.containerPort}/${port.protocol}`]: [{ HostIp: '127.0.0.1', HostPort: String(port.hostPort) }] } } };
       if (++inspections > 1) mutate(data); return data;

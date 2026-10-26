@@ -33,7 +33,8 @@ export async function harness(t, instances = fleet(), capacity = { memoryMiB: 40
     Config: { User: '1000:1000', Labels: structuredClone(entry.container.requiredLabels) },
     State: { Status: 'exited', ExitCode: 0, OOMKilled: false },
     Mounts: [{ Type: 'volume', Name: `world-${entry.id}`, Destination: '/world' }],
-    HostConfig: { CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], RestartPolicy: { Name: 'no' },
+    NetworkSettings: { Networks: { [`atlas-game-${entry.id}`]: {} } },
+    HostConfig: { NanoCpus: 2e9, PidsLimit: 1024, NetworkMode: `atlas-game-${entry.id}`, CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], RestartPolicy: { Name: 'no' },
       Memory: entry.resources.hardMemoryMiB * 1048576,
       PortBindings: Object.fromEntries(entry.container.publishedPorts.map(p =>
         [`${p.containerPort}/${p.protocol}`, [{ HostIp: '127.0.0.1', HostPort: String(p.hostPort) }]])) }

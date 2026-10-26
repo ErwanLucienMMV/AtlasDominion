@@ -14,6 +14,10 @@
       "required": ["name", "requiredLabels", "publishedPorts"],
       "properties": {
         "name": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$" },
+        "allowedNetworks": {
+          "type": "array", "uniqueItems": true, "maxItems": 16,
+          "items": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$" }
+        },
         "requiredLabels": {
           "type": "object", "additionalProperties": false,
           "required": ["io.atlasdominion.managed", "io.atlasdominion.instance"],

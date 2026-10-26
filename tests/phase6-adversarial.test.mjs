@@ -22,7 +22,8 @@ async function fixture() {
   const job = { instanceId: instance.id, source, destination, volumeName: 'world', containerPath: '/data', intervalSeconds: 60, keep: 1, minimumFreeBytes: 0, allowRetentionDeletion: false };
   const data = { Id: 'pinned', Name: `/${instance.container.name}`, Config: { Labels: instance.container.requiredLabels, User: '1000:1000' },
     State: { Status: 'exited', ExitCode: 0, OOMKilled: false }, Mounts: [{ Type: 'volume', Name: 'world', Destination: '/data' }],
-    HostConfig: { CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], RestartPolicy: { Name: 'no' }, Memory: instance.resources.hardMemoryMiB * 1048576,
+    NetworkSettings: { Networks: { [`atlas-game-${instance.id}`]: {} } },
+    HostConfig: { NanoCpus: 2e9, PidsLimit: 1024, NetworkMode: `atlas-game-${instance.id}`, CapDrop: ['ALL'], SecurityOpt: ['no-new-privileges:true'], RestartPolicy: { Name: 'no' }, Memory: instance.resources.hardMemoryMiB * 1048576,
       PortBindings: Object.fromEntries(instance.container.publishedPorts.map(p => [`${p.containerPort}/${p.protocol}`, [{ HostIp: '192.0.2.10', HostPort: String(p.hostPort) }]])) } };
   const events = [], config = { lockDirectory, jobs: [job] };
   const worker = new BackupWorker({ config, instances: [instance], docker: { inspect: async () => ({ data }) }, report: e => events.push(e) });
