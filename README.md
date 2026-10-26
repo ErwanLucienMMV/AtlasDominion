@@ -143,7 +143,7 @@ The base template lacks Discord's policy mount. Create `/etc/atlas/applications.
 }
 ```
 
-Use the existing monitoring controller override to mount controller configuration, the persistent audit volume and separate metrics credential, even if you start monitoring later. Use absolute operator paths: relative paths in overrides resolve against the first Compose file. Detailed options are in the [controller guide](docs/PHASE_2_CONTROLLER.md) and [Discord guide](docs/PHASE_3_DISCORD.md).
+Use the [monitoring controller override](infrastructure/monitoring/controller.override.json) to mount controller configuration, the persistent audit volume and separate metrics credential, even if you start monitoring later. Use absolute operator paths: relative paths in overrides resolve against the first Compose file. Configuration and credentials load at process startup; changes require an approved application restart or recreation. Cross-host controller access requires authenticated TLS; the supplied topology uses private same-host networking.
 
 ## 3. Prepare networks and storage
 
@@ -172,7 +172,7 @@ docker compose -f runtime/edge-staging/compose.json config --quiet
 
 The renderer requires an existing parent and a **new** output directory. It refuses existing destinations and preserves partial failures; retry using a new directory. Generated `dynamic/routes.yml` routes only `POST /discord/interactions` to `atlas-discord-api:3000`. Traefik uses File Provider with no Docker socket; access logs default to disabled.
 
-Verify private directory permissions and mode 0600 on generated `state/acme.json`. Preserve certificate state across restarts and back it up securely. Staging certificates are intentionally untrusted. After staging acceptance, create reviewed settings with `certificateAuthority: "production"` and render a new directory, such as `runtime/edge-production`. Switching the existing edge to it changes the same Compose project: review that change and preserve previous certificate state. See the [HTTPS runbook](docs/PHASE_1_INFRASTRUCTURE.md).
+Verify private directory permissions and mode 0600 on generated `state/acme.json`. Preserve certificate state across restarts and back it up securely. Staging certificates are intentionally untrusted. After staging acceptance, create reviewed settings with `certificateAuthority: "production"` and render a new directory, such as `runtime/edge-production`. Switching the existing edge to it changes the same Compose project: review that change and preserve previous certificate state. Verify production HTTPS without disabling certificate checks, and confirm the exact interaction route works while other management paths remain inaccessible. DNS-01 is not implemented by the renderer; resolve port/challenge availability before deployment.
 
 ## 5. Start the platform
 
@@ -227,10 +227,10 @@ Replies are private. Autocomplete comes from the registry without per-game comma
 
 | Game | Compose and registry example | Setup guide |
 |---|---|---|
-| Minecraft Java | [Compose](infrastructure/games/minecraft/compose.json), [manifest](infrastructure/games/minecraft/instance.example.json) | [Minecraft](docs/PHASE_4_MINECRAFT.md) |
-| V Rising | [Compose](infrastructure/games/vrising/compose.json), [manifest](infrastructure/games/vrising/instance.example.json) | [Additional games](docs/PHASE_7_GAMES.md) |
-| Project Zomboid | [Compose](infrastructure/games/zomboid/compose.json), [manifest](infrastructure/games/zomboid/instance.example.json) | [Additional games](docs/PHASE_7_GAMES.md) |
-| Palworld | [Compose](infrastructure/games/palworld/compose.json), [manifest](infrastructure/games/palworld/instance.example.json) | [Additional games](docs/PHASE_7_GAMES.md) |
+| Minecraft Java | [Compose](infrastructure/games/minecraft/compose.json), [manifest](infrastructure/games/minecraft/instance.example.json) | [Minecraft](#minecraft) |
+| V Rising | [Compose](infrastructure/games/vrising/compose.json), [manifest](infrastructure/games/vrising/instance.example.json) | [Additional games](#additional-games) |
+| Project Zomboid | [Compose](infrastructure/games/zomboid/compose.json), [manifest](infrastructure/games/zomboid/instance.example.json) | [Additional games](#additional-games) |
+| Palworld | [Compose](infrastructure/games/palworld/compose.json), [manifest](infrastructure/games/palworld/instance.example.json) | [Additional games](#additional-games) |
 
 For another compatible game, adapt the [generic Compose template](infrastructure/games/compose.template.json) and [instance schema](libs/server-registry/instance.schema.json). Existing generic capabilities need no controller or Discord changes. Custom readiness/save behavior may need an adapter. Verify Linux/image/nonroot compatibility; V Rising requires particular compatibility review.
 
@@ -238,7 +238,7 @@ For another compatible game, adapt the [generic Compose template](infrastructure
 
 1. Choose a unique stable instance ID, container name, Compose project, volume and unused native TCP/UDP ports. A second instance of one game needs its own identity and resources.
 2. Review image digest, game version, license, nonroot user, graceful shutdown and measured RAM/CPU/PID limits. Set `restart: "no"`, matching identity labels and an isolated network. The default approved network is `atlas-game-<instance-id>`; reviewed alternatives belong in `container.allowedNetworks`. Never attach games to management networks or mount the Docker socket.
-3. Create a protected game environment file with all required Compose variables. Pre-create the approved external data volume and prepare ownership. The Minecraft setup guide lists image, version, EULA, heap, hard memory/CPU, bind-address and volume settings.
+3. Create a protected game environment file with all required Compose variables listed below. Pre-create the approved external data volume and prepare ownership.
 4. Review the resolved configuration, then create only the stopped service. For Minecraft:
 
    ```sh
@@ -259,9 +259,65 @@ For another compatible game, adapt the [generic Compose template](infrastructure
 7. Activate the reviewed registry through the read-only mount and an approved controller restart/recreation using the full application override chain. Registry loading happens at startup. If selecting a new directory, update `REGISTRY_DIRECTORY` and apply the mount change; a plain restart does not change mounts.
 8. Test authorized and unauthorized Discord calls, start/status/stop, external gameplay, graceful saving and persistence after restarting the same game container. Confirm dashboard discovery and isolated backup recovery before relying on the instance.
 
-For Minecraft, align controller stop timeouts with the image save window: Dockerode's explicit timeout overrides Compose's grace period. Sample readiness is `unverified` until a supported probe is configured. Follow the [complete onboarding/removal checklist](docs/ADDING_A_GAME.md).
+Sample readiness is `unverified` until a supported probe is configured. Keep a private deployment record with image digest, server/client versions, container ID, volume names and live acceptance results. Verify a persistent world/player marker survives clean stop/start and isolated restoration; an open port or exit code zero alone does not establish a saved, playable world.
 
 To retire an instance, deny new operations, wait for operations/backups, stop/save safely and retain tested backups. Remove its registry entry through review. Deleting the container or world volume is a separate destructive action.
+
+### Minecraft
+
+Set all required variables in `/etc/atlas/minecraft.env`:
+
+| Variable | Value to review |
+|---|---|
+| `MINECRAFT_IMAGE` | Locally available reviewed `itzg/minecraft-server` digest |
+| `MINECRAFT_VERSION` | Exact compatible game release |
+| `MINECRAFT_EULA` | `TRUE` only after accepting the Minecraft EULA |
+| `MINECRAFT_HEAP` | JVM heap below the container memory ceiling |
+| `MINECRAFT_MEMORY_LIMIT`, `MINECRAFT_CPU_LIMIT` | Measured Docker limits; memory must match manifest `hardMemoryMiB` |
+| `MINECRAFT_BIND_ADDRESS` | Approved native TCP bind address |
+| `MINECRAFT_DATA_VOLUME` | Unique pre-created external world volume |
+
+The shipped instance publishes TCP 25565 and persists `/data`, using UID/GID `1000:1000`. Prepare new volume ownership accordingly and verify image startup without added capabilities. Internal RCON is enabled for the image's save/shutdown wrapper but is not published. The image has a 60-second save window and Compose allows 90 seconds: use controller `stopTimeoutSeconds: 90` and `timeoutMs: 120000`, or a larger measured pair. Dockerode's explicit stop timeout overrides Compose's grace period.
+
+### Additional games
+
+These shipped definitions target Linux AMD64. They are candidates requiring isolated startup, save/shutdown and gameplay validation with the exact selected image and server build.
+
+| Game / service | Native published ports | World/configuration volume mount | Additional storage |
+|---|---|---|---|
+| V Rising / `vrising` | UDP 9876, 9877 | `/mnt/vrising/persistentdata` | Separate installation volume at `/mnt/vrising/server` |
+| Project Zomboid / `zomboid` | UDP 16261, 16262 | `/home/steam/Zomboid` | Separate installation volume at `/home/steam/ZomboidDedicatedServer` |
+| Palworld / `palworld` | UDP 8211, 27015 | `/palworld` | Installation and saves share this volume |
+
+Create one protected environment file per game with these exact required names:
+
+| Game | Required environment variables |
+|---|---|
+| V Rising | `VRISING_IMAGE`, `VRISING_MEMORY_LIMIT`, `VRISING_CPU_LIMIT`, `VRISING_BIND_ADDRESS`, `VRISING_DATA_VOLUME`, `VRISING_INSTALL_VOLUME` |
+| Project Zomboid | `ZOMBOID_IMAGE`, `ZOMBOID_MEMORY_LIMIT`, `ZOMBOID_CPU_LIMIT`, `ZOMBOID_BIND_ADDRESS`, `ZOMBOID_DATA_VOLUME`, `ZOMBOID_INSTALL_VOLUME`, `ZOMBOID_HEAP`, `ZOMBOID_GAME_VERSION`, `ZOMBOID_ADMIN_PASSWORD`, `ZOMBOID_RCON_PASSWORD`, `ZOMBOID_SERVER_PASSWORD` |
+| Palworld | `PALWORLD_IMAGE`, `PALWORLD_MEMORY_LIMIT`, `PALWORLD_CPU_LIMIT`, `PALWORLD_BIND_ADDRESS`, `PALWORLD_DATA_VOLUME`, `PALWORLD_ADMIN_PASSWORD`, `PALWORLD_SERVER_PASSWORD` |
+
+Use reviewed image digests, measured limits, approved addresses and unique pre-created external volumes. All three run as `1000:1000`; prepare new world/installation volume ownership and verify writable image startup paths. Keep passwords in protected files and never publish resolved configurations containing them. V Rising's private access/password policy belongs in persistent `Settings/ServerHostSettings.json` and must be checked before admitting players.
+
+**V Rising deployment is blocked until an isolated test proves rootless startup and clean shutdown.** Existing integration notes flag root assumptions in the Wine/Xvfb wrapper; setting `HOME` and `WINEPREFIX` does not establish compatibility. Inspect the selected digest and review a derived image or alternative wrapper if necessary, rather than relaxing controller isolation.
+
+Pinning an image does not pin Steam-downloaded game files. V Rising/Zomboid candidate wrappers may update server files during startup; review that behavior, preserve an approved installation snapshot and record server build IDs before each approved start. `ZOMBOID_GAME_VERSION` selects a branch that can move. The Palworld definition disables update-on-boot and scheduled updates after initial installation; verify the exact image honors those settings. Its internal REST/RCON and Zomboid's internal RCON support shutdown and must remain unpublished.
+
+For these three definitions, set controller `stopTimeoutSeconds: 120` and `timeoutMs: 180000`, or a larger measured pair, before lifecycle use. This is a global controller change: review existing instances, including Minecraft. Compose's 120-second grace period alone does not override Dockerode's stop timeout. Require save evidence, no OOM/forced kill, and playable persistence after restarting the same container.
+
+After reviewing the image, environment file and volume setup, validate and create the selected stopped service. For Project Zomboid:
+
+```sh
+docker compose --env-file /etc/atlas/zomboid.env \
+  -f infrastructure/games/zomboid/compose.json config --quiet
+docker compose --env-file /etc/atlas/zomboid.env \
+  -f infrastructure/games/zomboid/compose.json \
+  create --no-deps --pull never zomboid
+```
+
+For Palworld, use `/etc/atlas/palworld.env`, `infrastructure/games/palworld/compose.json` and service `palworld`. For V Rising, only after its compatibility gate passes, use `/etc/atlas/vrising.env`, `infrastructure/games/vrising/compose.json` and service `vrising`. Then follow [provisioning and registration](#provision-and-register), including complete registry validation and explicit Discord allowlists.
+
+For backups, merge the [additional-game worker override](infrastructure/backup/phase7.override.json) after the base worker Compose file and adapt the [matching job examples](infrastructure/backup/phase7.settings.example.json), preserving existing jobs. Use actual data-volume names and the container data paths in the table. Give every job a non-overlapping source and destination: if retaining Minecraft, change its example destination `/archives` to a sibling such as `/archives/minecraft-survival` so it does not overlap `/archives/vrising-main`, `/archives/zomboid-main` or `/archives/palworld-main`. The worker adds the instance ID beneath each job destination. Installation-only volumes are outside the V Rising/Zomboid world archives; retain their exact builds separately. Palworld's combined installation/save volume may contain links, which the worker rejects: inspect it first and, if needed, review separate saves-only volume provisioning and a matching job rather than weakening verification. Complete [backup coordination and isolated restore](#10-set-up-backups-and-restore) before relying on protection.
 
 ## 8. Add a web application
 
@@ -353,7 +409,7 @@ docker compose --env-file /etc/atlas/deploy.env \
   up -d --no-deps --no-build --pull never prometheus grafana node-exporter
 ```
 
-Adapt the Grafana route example to its dedicated hostname and add it to the active dynamic directory. Verify login, disabled anonymous access, healthy private scrape targets and populated dashboards. Rules evaluate alerts, but **external notification delivery is not configured**. Connect and test an approved receiver before relying on unattended alerts. See [monitoring setup and acceptance](docs/PHASE_5_MONITORING.md).
+Adapt the Grafana route example to its dedicated hostname and add it to the active dynamic directory. Verify login, disabled anonymous access, healthy private scrape targets and populated dashboards. Rules evaluate alerts, but **external notification delivery is not configured**. Connect and test an approved receiver before relying on unattended alerts. Verify intentional stops do not trigger crash alerts, reconciliation/resource-sampling timestamps remain fresh, and measured host capacity agrees with the dashboard. Where `promtool` is installed, run `promtool check rules infrastructure/monitoring/alerts.yml` and `promtool test rules tests/fixtures/phase9/alerts.test.yml`.
 
 ## 10. Set up backups and restore
 
@@ -373,7 +429,7 @@ node scripts/verify-recovery.mjs minecraft-survival \
   /approved/new-recovery-drill
 ```
 
-This does not activate restored data or overwrite a live world. Review ownership and test the recorded image/game version in an isolated container before an approved production restoration. Persistent locks do not expire; investigate owners and outstanding work before authorizing removal. On-host archives cannot protect against total host/disk loss; off-host export is not implemented. See [backup procedures](docs/PHASE_6_BACKUP.md) and [disaster recovery](docs/RECOVERY.md).
+This does not activate restored data or overwrite a live world. Review ownership and test the recorded image/game version in an isolated container with separate volumes and nonproduction ports. Verify known world/player state, save cleanly and repeat a persistence check before an approved production restoration. Preserve the current world and prepare a reviewed activation/rollback plan; the verification CLI never activates restored data. Persistent locks do not expire; investigate owners and outstanding work before authorizing removal. On-host archives cannot protect against total host/disk loss; off-host export is not implemented.
 
 ## 11. Updates and troubleshooting
 
@@ -393,4 +449,6 @@ Record current image digests/configuration, save games safely, verify backups an
 
 Applications minimize logs; controller decisions use sanitized audit files and backup outcomes use bounded worker logs. Preserve incomplete archives and failure evidence. Secrets are loaded at process startup: file replacement alone does not rotate credentials; coordinate approved restarts and verify old-token rejection. Running games continue independently of the API/controller. After daemon recovery or host reboot, inspect actual states before new lifecycle requests; games use restart policy `no`.
 
-Before declaring deployment accepted, record real HTTPS/Discord checks, native game-port tests, private endpoint isolation, graceful save/persistence, monitoring/alert delivery, isolated restore and continued availability of existing services. Repository validation and remaining live gates are documented in [production safeguards](docs/PHASE_9_HARDENING.md), [validation results](docs/PHASE_9_VALIDATION.md) and the [recovery runbook](docs/RECOVERY.md).
+For daemon outages or an approved host reboot, preserve audits, locks, archives, registry/configuration, certificate state and external volumes. Record incident time, image/build versions and last verified backup without secrets. Inspect storage health and actual container/network states after recovery, then confirm authenticated health, reconciliation and event monitoring before new lifecycle requests. Never automatically restart games to match old intent or remove a lock based on age alone.
+
+Before declaring deployment accepted, record real HTTPS/Discord checks, native game-port tests, private endpoint isolation, graceful save/persistence, monitoring/alert delivery, isolated restore and continued availability of existing services. Also record the measured capacity/retention policy and approved daemon/reboot recovery drill. Automated checks cannot certify these live properties.
