@@ -118,14 +118,19 @@ export class ControllerService {
     const pending = new Set();
     let expired = false;
     const wait = async promise => {
-      if (expired) throw new Fault('TIMEOUT');
       const tracked = Promise.resolve(promise);
       pending.add(tracked);
       let timer;
       try {
-        return await Promise.race([tracked, new Promise((_, reject) => {
-          timer = setTimeout(() => { expired = true; reject(new Fault('TIMEOUT')); }, Math.max(0, deadline - performance.now()));
+        const remaining = deadline - performance.now();
+        if (expired || remaining <= 0) { expired = true; throw new Fault('TIMEOUT'); }
+        const value = await Promise.race([tracked, new Promise((_, reject) => {
+          timer = setTimeout(() => { expired = true; reject(new Fault('TIMEOUT')); }, remaining);
         })]);
+        // A resolved dependency can run before an overdue timer callback when
+        // synchronous work delays the event loop. Check elapsed time as well.
+        if (performance.now() >= deadline) { expired = true; throw new Fault('TIMEOUT'); }
+        return value;
       } finally {
         clearTimeout(timer);
         // Keep unresolved work visible for timeout cleanup without unhandled rejections.

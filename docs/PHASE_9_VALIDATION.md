@@ -42,3 +42,39 @@ Phase 9 repository work is delivered. Production acceptance remains conditional 
 ## Corrective review
 
 The subsequently supplied [adversarial report](PHASE_9_ADVERSARIAL_VALIDATION.md) reproduced 13 failures across seven issue classes. See [corrective validation](PHASE_9_FIX_VALIDATION.md) for the causes, fixes and subsequent results. The original validation above remains historical evidence; it does not supersede those findings or the remaining live acceptance gates.
+
+## Feature-worker follow-up — 2026-10-26
+
+Phase 9 implementation and its earlier corrective commits were already present
+at the start of this review. Three feature workers reviewed the requirements,
+added regression coverage and corrected three additional boundaries:
+
+- [Security and isolation review](PHASE_9_SECURITY_REVIEW.md): sensitive bind
+  parent paths with trailing separators now fail identity checks; existing
+  isolation, authentication and approved-port boundaries remain validated.
+- [Capacity and ingress review](PHASE_9_CAPACITY_REVIEW.md): preflight now checks
+  elapsed monotonic time before and after awaiting dependencies, preventing
+  overdue promise resolutions from admitting a new lifecycle mutation.
+- [Recovery and monitoring review](PHASE_9_RECOVERY_REVIEW.md): reconciliation
+  and reconnect timers reject invalid or overflowing millisecond values;
+  recovery and degraded-monitoring behavior retain their regression coverage.
+
+Final coordinated verification on Windows Node 20.15.1:
+
+- `npm test`: **1,184 passed**, zero failures/skips/cancellations/TODO,
+  **49.77 seconds**. Log: `%TEMP%/atlas-phase9-final-worker-validation.txt`.
+- `npm run check:production`: **15 passed**, zero failures/skips,
+  **27.16 seconds**. Log: `%TEMP%/atlas-phase9-current-production.txt`.
+  These are configuration renders; no Docker resources were changed.
+- `git diff --check`: passed with existing LF-to-CRLF normalization notices.
+
+The Windows sandbox required approved exceptions for Node workspace imports and
+Compose configuration access. Node's mock-timer tests emitted their experimental
+API warning; no warning was suppressed. Local `promtool` remains unavailable.
+Hosted CI, real daemon/reboot/restore drills, alert delivery and live game
+acceptance were not executed; their existing operator gates remain required.
+
+Each feature worker creates its own milestone commit, coordinated at least two
+minutes apart using actual creation times. Pre-existing untracked Phase 0–6
+reports and tests remain unchanged and excluded from those commits. No history
+is rewritten and nothing is pushed or deployed.
