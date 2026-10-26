@@ -7,7 +7,9 @@ function unsafeMount(mount) {
   const paths = [mount.Source, mount.Destination].filter(value => typeof value === 'string').map(value => posix.normalize(value));
   if (paths.some(value => posix.basename(value) === 'docker.sock')) return true;
   if (mount.Type !== 'bind') return false;
-  const source = typeof mount.Source === 'string' ? posix.normalize(mount.Source) : '/';
+  // normalize() retains a trailing slash; remove it so parent overlap cannot
+  // be bypassed with /var/lib/ instead of /var/lib. Preserve root explicitly.
+  const source = typeof mount.Source === 'string' ? posix.normalize(mount.Source).replace(/\/$/, '') || '/' : '/';
   return hostSystemPaths.some(path => source === path || (path !== '/' &&
     (source.startsWith(`${path}/`) || path.startsWith(`${source}/`))));
 }
