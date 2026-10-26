@@ -22,4 +22,16 @@ An earlier cross-feature focused run passed 55 and failed five existing identity
 
 Tests used Windows Node 20.15.1 with the required sandbox exception for resolving the workspace parent. Whitespace verification passed with existing LF-to-CRLF normalization notices. No production archive, audit history or Docker resource was modified. Full-suite validation is coordinated separately; live filesystem failure, reboot and gameplay restoration remain operator gates.
 
-Only `apps/docker-controller/audit.mjs`, `apps/backup-worker/archive.mjs`, the new storage regression file and this report belong to the storage worker's milestone. Its commit is coordinated at least two minutes from the other feature commits. Nothing is pushed or deployed.
+Only `apps/docker-controller/audit.mjs`, `apps/backup-worker/archive.mjs`, the new storage regression file and this report belong to the initial storage worker's milestone. Its commit is coordinated at least two minutes from the other feature commits. Nothing is pushed or deployed.
+
+## Forward compatibility correction
+
+The coordinated full run after the initial correction passed **1,299 tests and failed one**: the preserved Phase 2 persistence test writes a complete, delimited operator metadata object before asking the writer to append sanitized audit events. The new final-record schema check blocked that existing append behavior. Its original bytes were preserved, but this was an application compatibility regression. The test and all existing assertions remain unchanged.
+
+The writer now preserves a narrow distinction between append boundaries and trusted replay. A nonempty JSON object containing none of the five audit fields may remain opaque operator metadata only when already line-delimited. Append preserves its bytes and writes the next event separately. Replay still refuses that object as an audit record, so it never becomes inferred intent. An unterminated metadata object, malformed JSON, empty object, primitive/array or partial audit-shaped record still fails append. A complete unterminated audit record still requires the full schema before a separator is added.
+
+Five additive tests cover LF/CRLF/CR metadata preservation, strict replay refusal, unterminated metadata refusal and incomplete audit-shaped metadata refusal. All ten first-milestone regressions remain enabled unchanged.
+
+Focused compatibility validation: **150 passed**, zero failures/skips/cancellations/TODO, **2.73 seconds**, including all nine preserved Phase 2 persistence tests. Log: `%TEMP%/atlas-phase9-storage-compatibility-validation.txt`. Reproduce the earlier focused command with `tests/phase2-persistence-boundaries.test.mjs` added. This follow-up is a separate forward commit; the initial storage commit remains traceable.
+
+Final coordinated `npm test`: **1,305 passed**, zero failures/skips/cancellations/TODO, **67.89 seconds**. Log: `%TEMP%/atlas-p9-deep-fix-complete.txt`. Production configuration checks: **15 passed**, **43.81 seconds**, log `%TEMP%/atlas-p9-deep-fix-production.txt`. The original 80 adversarial tests, child fixture and report retain their supplied hashes. These checks do not execute live recovery or production Docker mutations. Local `promtool` remains unavailable; its existing CI/operator checks and other live gates remain required.

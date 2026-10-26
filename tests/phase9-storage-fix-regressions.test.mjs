@@ -8,6 +8,27 @@ import { verifyArchive, restoreArchive } from '../apps/backup-worker/archive.mjs
 
 const event = { timestamp: '2026-10-26T12:00:00.000Z', instanceId: 'approved', operation: 'start', outcome: 'accepted', error: null };
 
+for (const ending of ['\n', '\r\n', '\r']) test(`append preserves opaque delimited operator metadata ${JSON.stringify(ending)} without trusting it as intent`, async () => {
+  const root = await mkdtemp(join(tmpdir(), 'atlas-audit-legacy-metadata-'));
+  const file = join(root, '2026-10-26.jsonl');
+  const original = `${JSON.stringify({ preserved: 'existing operator record' })}${ending}`;
+  await writeFile(file, original);
+  const audit = new AuditLog(root);
+  await audit.append(event);
+  assert.equal(await readFile(file, 'utf8'), `${original}${JSON.stringify(event)}\n`);
+  await assert.rejects(new AuditLog(root).desiredStates([{ id: 'approved' }]));
+});
+
+for (const original of [JSON.stringify({ preserved: 'existing operator record' }), `${JSON.stringify({ outcome: 'accepted', preserved: 'incomplete audit' })}\n`]) {
+  test(`append refuses ambiguous or audit-shaped metadata ${JSON.stringify(original)}`, async () => {
+    const root = await mkdtemp(join(tmpdir(), 'atlas-audit-metadata-refusal-'));
+    const file = join(root, '2026-10-26.jsonl');
+    await writeFile(file, original);
+    await assert.rejects(new AuditLog(root).append(event));
+    assert.equal(await readFile(file, 'utf8'), original);
+  });
+}
+
 test('append separates a long UTF-8 final record without rewriting its bytes', async () => {
   const root = await mkdtemp(join(tmpdir(), 'atlas-audit-tail-boundary-'));
   const file = join(root, '2026-10-26.jsonl');

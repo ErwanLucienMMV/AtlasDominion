@@ -78,3 +78,55 @@ Each feature worker creates its own milestone commit, coordinated at least two
 minutes apart using actual creation times. Pre-existing untracked Phase 0–6
 reports and tests remain unchanged and excluded from those commits. No history
 is rewritten and nothing is pushed or deployed.
+
+## Deep edge-case corrections — 2026-10-26
+
+Phase 9 was implemented before the follow-up requests. The subsequent worker
+milestones are corrective hardening and additional verification, not a second
+implementation of the phase. The supplied [80-test deep edge-case report](PHASE_9_DEEP_EDGE_CASES.md)
+is retained as pre-correction evidence; the supplied tests and child fixture
+remain unchanged and enabled.
+
+- [Storage correction](PHASE_9_STORAGE_FIX.md): audit append preserves complete
+  unterminated records without rewriting history, damaged tails still fail
+  closed, and archive manifest links are rejected before restoration.
+- [Cleanup correction](PHASE_9_CLEANUP_FIX.md): concurrent lock releases share
+  their result, cleanup faults remain contained, readiness degrades, and
+  evidence-bearing ownership is retained rather than deleted.
+- [Identity correction](PHASE_9_IDENTITY_FIX.md): finite CPU/PID ceilings,
+  explicit nonroot identity and exact approved networks are checked before
+  returning mutation handles. Optional protected network approvals preserve
+  administrator-reviewed alternative configurations.
+
+The 17 reported failures were reproduced before correction. Existing assertions
+were preserved; older successful mock Engine snapshots were completed with the
+identity evidence now required by the controller. No failing test or CI check
+was removed, skipped or weakened.
+
+Final coordinated verification on Windows Node 20.15.1:
+
+- `npm test`: **1,305 passed**, zero failures/skips/cancellations/TODO,
+  **67.89 seconds**. Log: `%TEMP%/atlas-p9-deep-fix-complete.txt`.
+- `npm run check:production`: **15 passed**, **43.81 seconds**.
+  Log: `%TEMP%/atlas-p9-deep-fix-production.txt`. Configuration rendering only;
+  no production Docker resources changed.
+- Supplied 80-test suites, child fixture and original deep edge-case report:
+  hashes unchanged. All supplied adversarial cases now pass.
+- Whitespace verification passed with existing LF-to-CRLF notices. Node's
+  mock-timer experimental warning remains visible; no warning was suppressed.
+
+An intermediate coordinated run passed 1,299 tests and failed one preserved
+Phase 2 persistence assertion: schema validation of a terminated operator
+metadata record blocked the existing append-preservation contract. A separate
+forward correction restores append compatibility for delimited opaque metadata
+without accepting it as trusted replay intent. Unterminated metadata and
+partial audit-shaped records still fail closed. The original assertion and all
+new assertions remain enabled; [storage evidence](PHASE_9_STORAGE_FIX.md)
+records this regression and its correction.
+
+The final tree has no tracked modifications after the worker commits. Only the
+unrelated original untracked Phase 0–6 work remains outside these commits.
+Actual commit times remain at least 120 seconds apart. No history was rewritten
+and nothing was pushed or deployed. Local `promtool`, hosted CI, live daemon
+failure/reboot, real game restoration, external network/Discord acceptance and
+alert delivery remain unexecuted operator gates.

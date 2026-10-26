@@ -35,9 +35,14 @@ async function appendSeparator(file) {
     chunks.unshift(chunk.subarray(boundary + 1));
     if (boundary !== -1) break;
   }
-  // Replay accepts a complete final record without a terminator. Validate it
-  // before separating the next record; damaged evidence must never be changed.
-  validateRecord(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+  const record = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  // Preserve the writer's legacy ability to append after delimited operator
+  // metadata. It is opaque history, never trusted intent: replay stays strict.
+  const metadata = terminated && record && typeof record === 'object' && !Array.isArray(record) &&
+    Object.keys(record).length > 0 && !['timestamp', 'instanceId', 'operation', 'outcome', 'error'].some(key => Object.hasOwn(record, key));
+  // Unterminated records need an audit schema before introducing a separator;
+  // audit-shaped damage must fail closed even when already line-delimited.
+  if (!metadata) validateRecord(record);
   return terminated ? '' : '\n';
 }
 
