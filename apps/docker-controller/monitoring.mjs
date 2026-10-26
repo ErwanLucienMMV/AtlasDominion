@@ -63,6 +63,8 @@ export class Monitoring {
 // Periodic reconciliation repairs event gaps; one pass at a time bounds work.
 export class LifecycleObserver {
   constructor(service, client, { intervalMs = 15000, retryMs = 1000, sampleTimeoutMs = 5000 } = {}) {
+    if (!Number.isSafeInteger(intervalMs) || intervalMs < 1 || intervalMs > 2147483647) throw new Error('Invalid reconciliation interval');
+    if (!Number.isSafeInteger(retryMs) || retryMs < 1 || retryMs > 2147483647) throw new Error('Invalid event retry delay');
     if (!Number.isSafeInteger(sampleTimeoutMs) || sampleTimeoutMs < 1 || sampleTimeoutMs > 2147483647) throw new Error('Invalid sample timeout');
     this.service = service; this.client = client; this.intervalMs = intervalMs; this.retryMs = retryMs;
     this.sampleTimeoutMs = sampleTimeoutMs; this.samples = new Map();
