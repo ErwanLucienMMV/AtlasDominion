@@ -1,5 +1,5 @@
-import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, readdir, lstat, readFile, writeFile, statfs } from 'node:fs/promises';
+import { constants, createReadStream, createWriteStream } from 'node:fs';
+import { mkdir, readdir, lstat, open, writeFile, statfs } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
 import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
@@ -44,7 +44,19 @@ export async function createArchive(source, destination, instanceId, minimumFree
 export async function verifyArchive(archive, instanceId) {
   const root = await lstat(archive);
   if (!root.isDirectory() || root.isSymbolicLink()) throw new Error('Unsafe archive root');
-  const manifest = JSON.parse(await readFile(join(archive, 'manifest.json'), 'utf8'));
+  const path = join(archive, 'manifest.json'), metadata = await lstat(path);
+  if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.nlink !== 1) throw new Error('Unsafe archive manifest');
+  const file = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  let manifest;
+  try {
+    const check = async () => {
+      const current = await file.stat();
+      if (!current.isFile() || current.nlink !== 1 || current.dev !== metadata.dev || current.ino !== metadata.ino) throw new Error('Unsafe archive manifest');
+    };
+    await check();
+    manifest = JSON.parse(await file.readFile('utf8'));
+    await check();
+  } finally { await file.close(); }
   if (manifest.version !== 1 || manifest.instanceId !== instanceId || !Array.isArray(manifest.entries) ||
     manifest.entries.some(e => !safe(e.path)) || new Set(manifest.entries.map(e => e.path)).size !== manifest.entries.length) throw new Error('Invalid manifest');
   if (JSON.stringify(await inventory(join(archive, 'data'))) !== JSON.stringify(manifest.entries)) throw new Error('Archive integrity failure');

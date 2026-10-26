@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readdir } from 'node:fs/promises';
+import { open, mkdir, readdir } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { join } from 'node:path';
@@ -15,6 +15,30 @@ function validateRecord(event) {
     throw new Error('Invalid audit record');
   }
   return event;
+}
+
+async function appendSeparator(file) {
+  let position = (await file.stat()).size;
+  if (!position) return '';
+  const ending = Buffer.alloc(Math.min(position, 2));
+  const { bytesRead } = await file.read(ending, 0, ending.length, position - ending.length);
+  if (bytesRead !== ending.length) throw new Error('Audit changed during append');
+  const terminated = [10, 13].includes(ending.at(-1));
+  if (terminated) position -= ending.length === 2 && ending[0] === 13 && ending[1] === 10 ? 2 : 1;
+  const chunks = [];
+  while (position > 0) {
+    const length = Math.min(position, 4096), chunk = Buffer.alloc(length);
+    position -= length;
+    const { bytesRead } = await file.read(chunk, 0, length, position);
+    if (bytesRead !== length) throw new Error('Audit changed during append');
+    const boundary = Math.max(chunk.lastIndexOf(10), chunk.lastIndexOf(13));
+    chunks.unshift(chunk.subarray(boundary + 1));
+    if (boundary !== -1) break;
+  }
+  // Replay accepts a complete final record without a terminator. Validate it
+  // before separating the next record; damaged evidence must never be changed.
+  validateRecord(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+  return terminated ? '' : '\n';
 }
 
 // Append-only daily files. A clock rollback appends to the highest existing day,
@@ -46,7 +70,9 @@ export class AuditLog {
       await mkdir(this.directory, { recursive: true, mode: 0o700 });
       const day = `${safe.timestamp.slice(0, 10)}.jsonl`;
       const latest = (await readdir(this.directory)).filter(file => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(file)).sort().at(-1);
-      await appendFile(join(this.directory, latest > day ? latest : day), `${JSON.stringify(safe)}\n`, { mode: 0o600 });
+      const file = await open(join(this.directory, latest > day ? latest : day), 'a+', 0o600);
+      try { await file.appendFile(`${await appendSeparator(file)}${JSON.stringify(safe)}\n`); }
+      finally { await file.close(); }
     });
     this.tail = write.catch(() => {});
     return write;
