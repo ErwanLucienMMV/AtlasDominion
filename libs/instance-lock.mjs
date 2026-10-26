@@ -7,6 +7,14 @@ export async function acquireInstanceLock(directory, id) {
   if (!(await lstat(directory)).isDirectory() || (await lstat(directory)).isSymbolicLink()) throw new Error('Invalid lock directory');
   const path = join(directory, id);
   await mkdir(path);
-  let released = false;
-  return async () => { if (!released) { await rmdir(path); released = true; } };
+  let released = false, pending;
+  return () => {
+    if (released) return Promise.resolve();
+    // Concurrent callers share one removal. A failed release retains ownership;
+    // a later explicit retry may succeed after operator investigation.
+    if (!pending) pending = rmdir(path).then(() => { released = true; }, error => {
+      pending = undefined; throw error;
+    });
+    return pending;
+  };
 }

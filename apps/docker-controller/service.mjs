@@ -21,11 +21,19 @@ export class ControllerService {
     this.admission = Promise.resolve();
     this.failedAudits = new Map();
     this.monitoring = new Monitoring();
-    this.backupLockDirectory = backupLockDirectory; this.diskLocks = new Map();
+    this.backupLockDirectory = backupLockDirectory; this.diskLocks = new Map(); this.failedReleases = new Set();
   }
   async unlock(id) {
     const release = this.diskLocks.get(id);
-    if (release) { await release(); this.diskLocks.delete(id); }
+    if (release) {
+      try { await release(); }
+      catch {
+        this.failedReleases.add(id); this.ready = false;
+        throw new Fault('DOCKER_UNAVAILABLE');
+      }
+      this.diskLocks.delete(id);
+    }
+    this.failedReleases.delete(id);
     this.locks.delete(id);
   }
   authorize(id, actor) {
@@ -60,7 +68,7 @@ export class ControllerService {
           if (this.failedAudits.get(id) === event) this.failedAudits.delete(id);
         } catch (error) { if (error.code === 'TIMEOUT') throw error; }
       }
-      this.ready = this.failedAudits.size === 0;
+      this.ready = this.failedAudits.size === 0 && this.failedReleases.size === 0;
       this.monitoring.lastReconcile = Date.now() / 1000;
     } catch (error) { this.ready = false; throw error; }
   }
@@ -160,7 +168,7 @@ export class ControllerService {
         return { status: 200, operation: structuredClone(op) };
       }
       // Do not retain caller identity or idempotency key in asynchronous work.
-      void this.execute(entry, data.Id, op);
+      void this.execute(entry, data.Id, op).catch(() => { this.ready = false; });
       return { status: 202, operation: structuredClone(op) };
     } catch (error) {
       if (expired) {
@@ -168,7 +176,7 @@ export class ControllerService {
         // Timeout is not cancellation. No preflight continuation can mutate
         // Docker; retain ownership until its outstanding dependency settles.
         void Promise.allSettled([...pending]).then(() => this.unlock(id)).catch(() => { this.ready = false; });
-      } else await this.unlock(id);
+      } else if (!this.failedReleases.has(id)) await this.unlock(id);
       // Engine/identity failures require reconciliation before further admission.
       if (!(error instanceof Fault) || ['DOCKER_UNAVAILABLE', 'IDENTITY_MISMATCH', 'PORT_MISMATCH'].includes(error.code)) this.ready = false;
       throw error instanceof Fault ? error : new Fault('DOCKER_UNAVAILABLE');
@@ -257,7 +265,9 @@ export class ControllerService {
       // Neither Engine nor filesystem work is cancelled by a deadline. Keep
       // ownership until both settle, then persist any terminal correction.
       await Promise.allSettled([...pending]);
-      await this.unlock(entry.id);
+      // Cleanup failure is separate from the persisted Engine outcome. Keep
+      // ownership and readiness degraded; never let detached work reject Node.
+      try { await this.unlock(entry.id); } catch { this.ready = false; }
       try { await this.reconcile(); } catch { this.ready = false; }
     }
   }
