@@ -2,7 +2,7 @@
 
 AtlasDominion lets authorized Discord members list, inspect, start and stop administrator-provisioned Docker game servers. You provision containers and approve their configuration; Discord operates only instances in a validated registry.
 
-This guide covers a Linux Docker host. The repository supplies application source, Compose templates, monitoring and a backup worker. **It does not include Dockerfiles or published application images.** Supply reviewed application images before deployment. Validate selected game images, graceful saving and real gameplay on an isolated instance before using production worlds.
+This guide covers a Linux Docker host. The repository supplies application source, a Node.js 26.12.1 Dockerfile, Compose templates, monitoring and a backup worker. Build and review the application images before deployment; no published application images are supplied. Validate selected game images, graceful saving and real gameplay on an isolated instance before using production worlds.
 
 ## Deployment overview
 
@@ -69,9 +69,17 @@ Create new files without replacing existing configuration. Restrict permissions 
 
 ### Supply application images
 
-Build and review images containing this repository and its pinned production dependencies. The controller image must run `node apps/docker-controller/main.mjs`; the Discord image must run `node apps/discord-api/main.mjs`, from the repository directory. The application Compose template supplies neither commands nor a working directory, so configure them in your images or an override. Use an explicit nonroot user, give only the controller the required Docker socket group access, and verify writable audit storage.
+The root [Dockerfile](Dockerfile) provides separate `docker-controller`, `discord-api` and `backup-worker` targets based on `node:26.12.1-bookworm-slim`. It installs pinned production dependencies with `npm ci --omit=dev`, sets `/app` as the working directory, selects each service's startup command and runs as the nonroot `node` user (UID/GID 1000). Compose selects the matching target for each service. The backup stack overrides the UID/GID with its approved volume-reader identity. Give the controller the required Docker socket group access through your protected application override, and verify writable audit storage and readable secrets for the selected users.
 
-Use Node.js 26.12.1 in the controller, Discord API and backup worker images (for example, the official `node:26.12.1-bookworm-slim` base, pinned to a reviewed digest). Install dependencies with `npm ci --omit=dev` during the image build. For this security upgrade, rebuild all three images from a freshly acquired patched base, verify `node --version` inside each image, then deploy the reviewed image references. Updating the host runtime or this repository does not update Node.js inside existing images or running containers.
+After configuring `/etc/atlas/deploy.env`, choose new, unused versioned image tags in `DISCORD_API_IMAGE` and `CONTROLLER_IMAGE`, then build without starting services:
+
+```sh
+docker compose --env-file /etc/atlas/deploy.env \
+  -f infrastructure/applications/compose.json \
+  build --pull docker-controller discord-api
+```
+
+Verify each resulting image with `docker run --rm --network none --read-only --entrypoint node IMAGE --version`; expect `v26.12.1`. Record the reviewed base and resulting image digests. Build the backup target as described in the backup section. Updating the host runtime or this repository does not update Node.js inside existing images or running containers. After review, deploy the new image references using the complete configuration and selected-service startup commands below.
 
 Acquire all approved application, infrastructure and game images explicitly before startup. Templates use `pull_policy: never`; missing local images fail instead of downloading. Use exact version pins, preferably reviewed digests, for the host architecture.
 
@@ -422,6 +430,7 @@ The independent worker supports `stopped-volume` backups: SHA-256 archive verifi
 1. Adapt the [settings example](infrastructure/backup/settings.example.json) and [worker Compose file](infrastructure/backup/compose.json). Set exact volume/source/container paths, bindings, archive capacity, schedule and retention. The base worker mounts Minecraft data; other instances need additional read-only source mounts and jobs, illustrated by the [additional-game override](infrastructure/backup/phase7.override.json).
 2. Set controller `backupLockDirectory: "/locks"` and add `infrastructure/backup/controller.override.json` to the **complete application override chain**. Controller and worker must mount the same pre-created host lock directory with permissions for both users. Apply and verify controller coordination before enabling the worker.
 3. Supply `BACKUP_IMAGE`, `BACKUP_UID`, `BACKUP_GID`, `DOCKER_SOCKET_GID`, `BACKUP_CONFIG_FILE`, `BACKUP_DIRECTORY`, `BACKUP_LOCK_DIRECTORY`, `REGISTRY_DIRECTORY` and required game-volume variables in protected configuration. Review socket privileges, source readability and writable archive/lock directories. The image needs the repository working directory and pinned dependencies.
+   Choose a new, unused versioned `BACKUP_IMAGE` tag and build it with `docker compose --env-file /etc/atlas/deploy.env -f infrastructure/backup/compose.json build --pull backup-worker`. Verify its Node version with the image check above; the Dockerfile supplies the working directory, dependencies and worker command.
 4. Validate `docker compose --env-file /etc/atlas/deploy.env -f infrastructure/backup/compose.json config --quiet`, then approve starting only `backup-worker` using `up -d --no-deps --no-build --pull never`. Include any additional worker overrides in both commands.
 5. Stop/save a game gracefully, inspect a successful `verified` worker outcome and test isolated gameplay recovery. Retention deletion defaults off; enabling it approves that job's deletion policy separately.
 

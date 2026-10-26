@@ -3,6 +3,7 @@
   "services": {
     "discord-api": {
       "image": "${DISCORD_API_IMAGE:?Set reviewed version-pinned Discord API image}",
+      "build": {"context": "../..", "dockerfile": "Dockerfile", "target": "discord-api"},
       "pull_policy": "never",
       "restart": "unless-stopped",
       "mem_limit": "256m",
@@ -19,6 +20,7 @@
     },
     "docker-controller": {
       "image": "${CONTROLLER_IMAGE:?Set reviewed version-pinned controller image}",
+      "build": {"context": "../..", "dockerfile": "Dockerfile", "target": "docker-controller"},
       "pull_policy": "never",
       "restart": "unless-stopped",
       "mem_limit": "512m",

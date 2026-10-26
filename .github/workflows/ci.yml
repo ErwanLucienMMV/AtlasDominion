@@ -40,3 +40,31 @@ jobs:
           sudo apt-get install --yes --no-install-recommends prometheus
       - run: promtool check rules infrastructure/monitoring/alerts.yml
       - run: promtool test rules tests/fixtures/phase9/alerts.test.yml
+  deployment-images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ['docker-controller', 'discord-api', 'backup-worker']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Node 26 deployment image
+        run: docker build --pull --target ${{ matrix.service }} --tag atlas/${{ matrix.service }}:ci .
+      - name: Verify runtime, nonroot user, dependencies and entry point
+        env:
+          SERVICE: ${{ matrix.service }}
+        run: |
+          image="atlas/$SERVICE:ci"
+          test "$(docker image inspect --format '{{json .Config.Cmd}}' "$image")" = "[\"node\",\"apps/$SERVICE/main.mjs\"]"
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges:true --entrypoint node "$image" \
+            --input-type=module -e '
+              import assert from "node:assert/strict";
+              assert.equal(process.versions.node, "26.12.1");
+              assert.ok(process.getuid() > 0);
+              assert.equal(process.cwd(), "/app");
+              await import("./apps/docker-controller/http.mjs");
+              await import("./apps/discord-api/http.mjs");
+              await import("./apps/backup-worker/worker.mjs");
+            '

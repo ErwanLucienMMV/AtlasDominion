@@ -1,0 +1,10 @@
+# Send only application source and dependency manifests to the builder.
+**
+!Dockerfile
+!package.json
+!package-lock.json
+!.npmrc
+!apps/**/*.mjs
+!libs/**/*.mjs
+!libs/server-registry/instance.schema.json
+!scripts/**/*.mjs

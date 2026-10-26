@@ -3,6 +3,7 @@
   "services": {
     "backup-worker": {
       "image": "${BACKUP_IMAGE:?Set reviewed pinned backup image}",
+      "build": {"context": "../..", "dockerfile": "Dockerfile", "target": "backup-worker"},
       "pull_policy": "never",
       "command": ["node", "apps/backup-worker/main.mjs"],
       "user": "${BACKUP_UID:?Set approved volume reader UID}:${BACKUP_GID:?Set approved volume reader GID}",

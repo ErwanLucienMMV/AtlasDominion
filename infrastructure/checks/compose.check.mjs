@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { writeInfrastructure } from '../../libs/infrastructure/index.mjs';
 
@@ -48,6 +48,12 @@ for (const acmeChallenge of ['http-01', 'tls-alpn-01']) for (const accessLogs of
 
 test('application Compose preserves private controller and socket boundary', () => {
   const { services, networks } = compose('infrastructure/applications/compose.json');
+  for (const name of ['discord-api', 'docker-controller']) {
+    assert.equal(resolve(services[name].build.context), resolve(root));
+    assert.equal(services[name].build.dockerfile, 'Dockerfile');
+    assert.equal(services[name].build.target, name);
+    assert.equal(services[name].pull_policy, 'never');
+  }
   for (const service of Object.values(services)) assert.equal(service.ports, undefined);
   assert.equal(services['docker-controller'].networks.proxy, undefined);
   assert.equal(services['docker-controller'].networks.egress, undefined);

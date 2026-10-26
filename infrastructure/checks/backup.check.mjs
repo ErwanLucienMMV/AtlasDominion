@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const env = { ...process.env, BACKUP_IMAGE: 'local/backup:validation', BACKUP_UID: '1000', BACKUP_GID: '1000', DOCKER_SOCKET_GID: '999',
   BACKUP_CONFIG_FILE: `${root}/package.json`, REGISTRY_DIRECTORY: root, BACKUP_DIRECTORY: root, BACKUP_LOCK_DIRECTORY: root,
@@ -12,6 +13,10 @@ function render(files) {
 }
 test('backup Compose has no network, ports or writable world mount', () => {
   const config = render(['infrastructure/backup/compose.json']), worker = config.services['backup-worker'];
+  assert.equal(resolve(worker.build.context), resolve(root));
+  assert.equal(worker.build.dockerfile, 'Dockerfile');
+  assert.equal(worker.build.target, 'backup-worker');
+  assert.equal(worker.pull_policy, 'never');
   assert.equal(worker.network_mode, 'none'); assert.equal(worker.ports, undefined); assert.equal(worker.read_only, true);
   assert.equal(worker.volumes.find(v => v.target === '/sources/minecraft-survival').read_only, true);
   assert.equal(config.volumes.world.external, true);
